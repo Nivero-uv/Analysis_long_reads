@@ -1,0 +1,1296 @@
+---
+title: "Ujc_mouse_report_iso_mas" 
+author: "Nathalia Vega Romero"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+documentclass: article
+fontsize: 11pt
+papersize: a4paper
+urlcolor: blue
+geometry: "left=2.5cm,right=2.5cm,top=2cm,bottom=2cm"
+output: 
+  html_document:
+    code_download: false
+    toc: TRUE
+    toc_depth: 2
+    theme: spacelab
+    self_contained: true
+    thumbnails: true
+    lightbox: true
+    gallery: false
+    highlight: tango
+    fig_width: 9
+    fig_height: 6
+    fig_caption: true
+    df_print: kable
+---
+
+
+```{r setup, include=FALSE, echo = FALSE, warning = FALSE, fig.align="center"}
+# Setup
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, results='hide', fig.pos = "h", fig.align = "center")
+```
+
+```{r load_libraries, echo=FALSE}
+
+library(ggpubr)
+library(ggfortify)
+#library(NOISeq)
+library(RColorConesa)
+library(grid)
+library(UpSetR)
+library(tidyverse)
+library(cowplot)
+library(devtools)
+ruta_noiseq <- "C:/Users/edward/Downloads/NOISeq" 
+load_all(ruta_noiseq)
+
+```
+
+```{r}
+
+dir <- "files"
+load(paste0(dir, "Isoseq_ujc_class.Rdata"))
+load(paste0(dir, "Masseq_ujc_class.Rdata")) 
+
+```
+
+```{r}
+nuevo_dataframe <- data.frame(UJC = character())
+
+procesar_dataframes <- function(dataframe1, dataframe2, prefix) {
+  # Definir la función interna para procesar cada dataframe
+  procesar_dataframe <- function(df_name, dataframe) {
+    if (startsWith(df_name, prefix)) {
+      co_columna <- dataframe[[df_name]]$UJC 
+      return(data.frame(UJC = co_columna))
+    } else {
+      return(NULL) # Si el nombre del dataframe no comienza con "B3", retornar NULL
+    }
+  }
+
+  nuevos_dataframes1 <- lapply(names(dataframe1), procesar_dataframe, dataframe1) 
+  nuevo_dataframe <- do.call(rbind, nuevos_dataframes1) 
+  elementos_comunes <- Reduce(intersect, nuevo_dataframe) 
+  tabla_frecuencia <- table(elementos_comunes)
+  tabla_frecuencia <- as.data.frame(tabla_frecuencia) 
+  tabla_filtrada1 <- subset(tabla_frecuencia, Freq == 3) 
+  
+  nuevos_dataframes2 <- lapply(names(dataframe2), procesar_dataframe, dataframe2)
+  nuevo_dataframe <- do.call(rbind, nuevos_dataframes2)
+  elementos_comunes <- Reduce(intersect, nuevo_dataframe)
+  tabla_frecuencia <- table(elementos_comunes)
+  tabla_frecuencia <- as.data.frame(tabla_frecuencia)
+  tabla_filtrada2 <- subset(tabla_frecuencia, Freq == 3)
+
+  elementos_comunes_all <- intersect(tabla_filtrada1$elementos_comunes, tabla_filtrada2$elementos_comunes)
+  return(elementos_comunes_all)
+}
+
+comunes_brain <- procesar_dataframes(data_class_Iso_Seq, data_class_Mas_Seq_2, "B3") 
+length(comunes_brain)
+comunes_kidney <- procesar_dataframes(data_class_Iso_Seq, data_class_Mas_Seq_2, "K3") 
+length(comunes_kidney)
+comunes_mix <- procesar_dataframes(data_class_Iso_Seq, data_class_Mas_Seq_2, "BK") 
+length(comunes_mix)
+
+```
+
+```{r}
+out_dir<- "files/out"
+
+save(comunes_brain, file = paste0(out_dir, "comunes_brain.Rdata"))
+save(comunes_kidney, file = paste0(out_dir, "comunes_kidney.Rdata"))
+save(comunes_mix, file = paste0(out_dir, "comunes_mix.Rdata"))
+
+load(paste0(out_dir, "comunes_brain.Rdata"))
+load(paste0(out_dir, "comunes_kidney.Rdata"))
+load(paste0(out_dir, "comunes_mix.Rdata"))
+
+```
+
+
+```{r load_functions, echo=FALSE}
+# Load functions
+src_dir <- "./"
+setwd(src_dir) 
+```
+
+
+```{r themes_and_colors, echo=FALSE}
+# Themes and colors
+xaxislevelsF1 <- c("full-splice_match", "incomplete-splice_match", "novel_in_catalog", "novel_not_in_catalog", "genic", "antisense", "fusion", "intergenic", "genic_intron")
+xaxislabelsF1 <- c("FSM", "ISM", "NIC", "NNC", "Genic\nGenomic", "Antisense", "Fusion", "Intergenic", "Genic\nIntron")
+cat.palette <- c("FSM" = "#6BAED6", "ISM" = "#FC8D59", "NIC" = "#78C679", "NNC" = "#EE6A50", "Genic\nGenomic" = "#969696", "Antisense" = "#66C2A4", "Fusion" = "goldenrod1", "Intergenic" = "darksalmon", "Genic\nIntron" = "#41B6C4")
+
+# Themes and colors
+xaxislevelsF1 <- c("full-splice_match", "incomplete-splice_match", "novel_in_catalog", "novel_not_in_catalog", "genic", "antisense", "fusion", "intergenic", "genic_intron")
+xaxislabelsF1 <- c("FSM", "ISM", "NIC", "NNC", "Genic\nGenomic", "Antisense", "Fusion", "Intergenic", "Genic\nIntron")
+cat.palette <- c("FSM" = "#6BAED6", "ISM" = "#FC8D59", "NIC" = "#78C679", "NNC" = "#EE6A50", "Genic\nGenomic" = "#969696", "Antisense" = "#66C2A4", "Fusion" = "goldenrod1", "Intergenic" = "darksalmon", "Genic\nIntron" = "#41B6C4")
+theme_Publication <- function(base_size=14, base_family="sans") {
+      library(grid)
+      library(ggthemes)
+      (theme_foundation(base_size=base_size, base_family=base_family)
+       + theme(plot.title = element_text(face = "bold",
+                                         size = rel(1.2), hjust = 0.5, margin = margin(0,0,0,0)),
+               text = element_text(),
+               panel.background = element_rect(colour = NA),
+               plot.background = element_rect(colour = NA),
+               panel.border = element_rect(colour = NA),
+               axis.title = element_text(face = "bold",size = rel(1)),
+               axis.title.y = element_text(angle=90,vjust =2),
+               axis.title.x = element_text(vjust = -0.2),
+               axis.text = element_text(), 
+               axis.line.x = element_line(colour="black"),
+               axis.line.y = element_line(colour="black"),
+               axis.ticks = element_line(),
+               panel.grid.major = element_line(colour="#f0f0f0"),
+               panel.grid.minor = element_blank(),
+               legend.key = element_rect(colour = NA),
+               legend.position = "bottom",
+               legend.direction = "horizontal",
+               legend.box = "vetical",
+               legend.key.size= unit(0.5, "cm"),
+               #legend.margin = unit(0, "cm"),
+               legend.title = element_text(face="italic"),
+               plot.margin=unit(c(0,0,0,0),"mm"),
+               strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+               strip.text = element_text(face="bold"),
+       ))
+}
+
+```
+
+## Individual Samples Quantification {.tabset .tabset-pills}
+
+# ISO - Seq Results
+
+# Iso -Seq Counts
+
+```{r}
+
+# Extraer las columnas NAME y CO de cada dataframe en la lista
+lista_subset <- lapply(data_class_Iso_Seq, function(df) df[, c("UJC", "FL")])
+
+# Filtrar los nombres comunes de la columna NAME
+comunes <- c(comunes_brain, comunes_kidney, comunes_mix)
+lista_filtered <- lapply(lista_subset, function(df) merge(data.frame(UJC = unique(comunes)), df, all.x = TRUE, by = "UJC"))
+
+# Unir las columnas ID y UJC de cada dataframe filtrado
+biocounts <- Reduce(function(x, y) merge(x, y, by = "UJC", all = TRUE), lista_filtered)
+biocounts[is.na(biocounts)] <- 0  # Reemplazar NA por 0
+
+# Renombrar las columnas
+colnames(biocounts) <- c("UJC", sub("\\_.*", "", names(data_class_Iso_Seq)))
+
+rownames(biocounts) <- biocounts$UJC
+biocounts <- subset(biocounts, select = -UJC)
+
+
+# Extraer las columnas FL y UJC de cada dataframe en la lista
+lista_subset <- lapply(data_class_Iso_Seq, function(df) df[, c("UJC", "gc_cont")])
+
+# Filtrar los nombres comunes de la columna NAME
+#comunes <- c(comunes_brain, comunes_kidney, comunes_mix)
+lista_filtered <- lapply(lista_subset, function(df) merge(data.frame(UJC = unique(comunes)), df, all.x = TRUE, by = "UJC"))
+
+# Unir las columnas FL y UJC  de cada dataframe filtrado
+GC <- Reduce(function(x, y) merge(x, y, by = "UJC", all = TRUE), lista_filtered)
+GC[is.na(GC)] <- 0  # Reemplazar NA por 0
+
+# Renombrar las columnas
+colnames(GC) <- c("UJC", sub("\\_.*", "", names(data_class_Iso_Seq)))
+
+rownames(GC) <- GC$UJC
+GC <- subset(GC, select = -UJC)
+head(GC)
+
+# Extraer las columnas FL y UJC de cada dataframe en la lista
+lista_subset <- lapply(data_class_Iso_Seq, function(df) df[, c("UJC", "ref_length")])
+
+# Filtrar los nombres comunes de la columna NAME
+#comunes <- c(comunes_brain, comunes_kidney, comunes_mix)
+lista_filtered <- lapply(lista_subset, function(df) merge(data.frame(UJC = unique(comunes)), df, all.x = TRUE, by = "UJC"))
+
+# Unir las columnas FL y UJC  de cada dataframe filtrado
+R_LENGTH <- Reduce(function(x, y) merge(x, y, by = "UJC", all = TRUE), lista_filtered)
+R_LENGTH[is.na(R_LENGTH)] <- 0  # Reemplazar NA por 0
+
+# Renombrar las columnas
+colnames(R_LENGTH) <- c("UJC", sub("\\_.*", "", names(data_class_Iso_Seq)))
+
+rownames(R_LENGTH) <- R_LENGTH$UJC
+R_LENGTH <- subset(R_LENGTH, select = -UJC)
+
+head(R_LENGTH)
+
+
+# Extraer las columnas FL y UJC  de cada dataframe en la lista
+lista_subset <- lapply(data_class_Iso_Seq, function(df) df[, c("UJC", "length")])
+
+# Filtrar los nombres comunes de la columna NAME
+#comunes <- c(comunes_brain, comunes_kidney, comunes_mix)
+lista_filtered <- lapply(lista_subset, function(df) merge(data.frame(UJC = unique(comunes)), df, all.x = TRUE, by = "UJC"))
+
+# Unir las columnas FL y UJC  de cada dataframe filtrado
+LENGTH <- Reduce(function(x, y) merge(x, y, by = "UJC", all = TRUE), lista_filtered)
+LENGTH[is.na(LENGTH)] <- 0  # Reemplazar NA por 0
+
+# Renombrar las columnas
+colnames(LENGTH) <- c("UJC", sub("\\_.*", "", names(data_class_Iso_Seq)))
+
+rownames(LENGTH) <- LENGTH$UJC
+LENGTH <- subset(LENGTH, select = -UJC)
+
+head(LENGTH)
+
+library(matrixStats)
+median_ref_lengths <- apply(R_LENGTH, 1, function(row) median(row[row != 0])) #rowMedians(as.matrix(R_LENGTH))
+median_lengths <- apply(LENGTH, 1, function(row) median(row[row != 0])) #rowMedians(as.matrix(LENGTH))
+mean_gc <- apply(GC, 1, function(row) mean(row[row != 0])) #rowMedians(as.matrix(GC))
+
+```
+```{r}
+get_count <- function(quant_file, structural_category = NULL, classification = NULL) {
+  mycounts <- quant_file
+  # Filter for specific structural categories if provided
+  if (!is.null(structural_category)) {
+    mycounts <- mycounts[rownames(mycounts) %in% classification$UJC[classification$structural_category == structural_category], ]
+  }
+
+  return(mycounts)
+}
+
+# Extraer las columnas FL y UJC de cada dataframe en la lista
+lista_cat <- lapply(data_class_Iso_Seq, function(df) df[, c("UJC", "structural_category")])
+
+# Filtrar los nombres comunes de la columna NAME
+#comunes <- c(comunes_brain, comunes_kidney, comunes_mix)
+lista_filtered_cat <- lapply(lista_cat, function(df) merge(data.frame(UJC = unique(comunes)), df, all.x = TRUE, by = "UJC"))
+
+# Unir las columnas FL y UJC  de cada dataframe filtrado
+CATs <- Reduce(function(x, y) merge(x, y, by = "UJC", all = TRUE), lista_filtered_cat)
+#head(CATs)
+#CATs
+# Función para encontrar el elemento más frecuente en una fila
+elemento_mas_frecuente <- function(fila) {
+  tabla <- table(fila)
+  elemento <- names(tabla)[which.max(tabla)]
+  return(elemento)
+}
+
+# Aplicar la función a cada fila del dataframe
+elementos_mas_frecuentes <- apply(CATs[, -1], 1, elemento_mas_frecuente)
+
+# Crear una nueva matriz con los resultados
+nueva_class <- data.frame(UJC = CATs$UJC, structural_category = elementos_mas_frecuentes)
+#nueva_class
+
+#class_ind_quant <- read.table(class_ind_quantification, header = T, sep = "\t")
+nueva_class$structural_category <- factor(nueva_class$structural_category,
+                                              labels = xaxislabelsF1,
+                                              levels = xaxislevelsF1,
+                                              ordered=TRUE)
+
+mycounts_quant_ind <- biocounts
+#biocounts <- get_count_matrix(quant_ind, SIRVs = FALSE, classification = class_ind_quant)
+
+FSMbiocounts <- get_count(mycounts_quant_ind, classification = nueva_class, structural_category = "FSM")
+#biocounts
+dim(FSMbiocounts)
+
+```
+
+
+```{r, eval=TRUE}
+
+# Factors
+myfactors <- data.frame(
+  cond = c(rep("brain", 3), rep("brain_kidney", 3), rep("kidney", 3)), 
+  batch = c(rep("1", 3), rep("1", 3), rep("1", 3))
+)
+myfactors$cond_batch <- paste0(myfactors$cond, "_", myfactors$batch)
+myfactors$sample <- colnames(biocounts) 
+
+```
+
+```{r}
+quant_ind <- file.path(src_dir, "data/mouse_flair_ind_iso.counts.tsv") 
+class_ind_quantification <- file.path(src_dir, "data/mouse_flair_ind_iso_classification.txt")
+class_ind_quant <- read.table(class_ind_quantification, header = T, sep = "\t")
+class_ind_quant$structural_category <- factor(class_ind_quant$structural_category,
+                                             labels = xaxislabelsF1,
+                                             levels = xaxislevelsF1,
+                                             ordered=TRUE)
+
+SCcounts <- list()
+SCdata <- list()
+
+
+mylength <- median_lengths
+names(mylength) <- rownames(LENGTH)
+mygc <- mean_gc
+names(mygc) <- rownames(GC)
+
+for (i in 1:length(xaxislabelsF1)){
+  #get_count
+  #get_count_matrix
+  tmp_counts <- get_count(biocounts, classification = nueva_class, structural_category = xaxislabelsF1[i])
+  if (nrow(tmp_counts) > 0){
+    SCcounts[[i]] <- tmp_counts
+    #SCdata[[i]] <- create_noiseq_object(tmp_counts, myfactors, ind_gclength)
+    SCdata[[i]] <- readData(data = tmp_counts, length = mylength, 
+                          gc = mygc*100, factors = myfactors)
+                          #(data = tmp_counts, length = mylength,
+                          #gc = mygc, factors = myfactors)
+  }
+}
+
+names(SCcounts) <- xaxislabelsF1[1:8]
+names(SCdata) <- xaxislabelsF1[1:8]
+
+```
+
+
+```{r}
+# ruta_noiseq <- "C:/Users/edward/Downloads/NOISeq"
+# load_all(ruta_noiseq)
+mylength <- median_lengths
+names(mylength) <- rownames(LENGTH)
+mygc <- mean_gc
+names(mygc) <- rownames(GC)
+
+biodata_iso <- readData(data = biocounts, length = mylength, 
+                          gc = mygc*100, factors = myfactors) 
+```
+
+
+#### Length bias {.tabset .tabset-pills}
+
+##### By Tissue {.tabset .tabset-dropdown}
+
+###### All
+
+```{r fig_length_bias_all_tissue, eval=TRUE,  fig.cap = "Figure. Transcript length bias by tissue plotted with NOISeq for mouse transcripts. The length is divided into intervals (bins) containing 200 features, and the middle point of each bin is depicted on the X-axis. For each bin, the 5% trimmed mean of the corresponding expression values (CPM if norm=FALSE or values provided if norm=TRUE) is computed and depicted on the Y-axis."}
+explo.plot(dat(biodata_iso, factor = "cond", type = "lengthbias"), samples = NULL, toplot = "global")
+```
+
+```{r, eval=TRUE, results='hide'}
+SC_lengthbias <- list()
+for (i in names(SCcounts)){
+  tryCatch({
+    SC_lengthbias[[i]] <- dat(SCdata[[i]], factor = "cond", type = "lengthbias")
+  },
+  error = function(x){})
+}
+```
+
+```{r, eval=TRUE, results='asis', fig.cap = "Figure. %GC content bias by tissue plotted with NOISeq for mouse current SC transcripts. The GC content is divided into intervals (bins) containing 200 features. The middle point of each bin is depicted on the X-axis. For each bin, the 5% trimmed mean of the corresponding expression values is computed and depicted on the Y-axis."}
+for (i in names(SC_lengthbias)){
+  cat(paste0("\n\n###### ", gsub("\n", "",names(SCcounts[i])), "\n\n"))
+  explo.plot(SC_lengthbias[[i]], samples = NULL, toplot = "global")
+}
+```
+
+##### By sample {.tabset .tabset-dropdown}
+
+###### All
+
+
+
+```{r fig_length_bias_all_sample, eval=TRUE, fig.cap = "Figure. Transcript length bias by sample plotted with NOISeq for mouse transcripts. The length is divided into intervals (bins) containing 200 features, and the middle point of each bin is depicted on the X-axis. For each bin, the 5% trimmed mean of the corresponding expression values (CPM if norm=FALSE or values provided if norm=TRUE) is computed and depicted on the Y-axis."}
+
+
+biolengthbias = dat(biodata_iso, factor = "sample", type = "lengthbias")
+
+par(mfrow = c(3, 3), mai = c(0.5,0.5, 0.3, 0.3))
+for (i in 1:ncol(biocounts)){
+  explo.plot(biolengthbias, samples = i, toplot = "global")
+}
+
+mylength_r <- as.numeric(median_ref_lengths)
+names(mylength_r) <- rownames(R_LENGTH)
+#mylength_r <- mylength_r[!is.na(mylength_r)]
+
+#biocounts_filt <- biocounts[mylength_r, , drop = FALSE]
+biodata_r <- readData(data = biocounts, length = mylength_r, factors = myfactors)
+biodata_rl <- readData(data = biocounts, length = mylength_r[mylength_r < 8000], factors = myfactors) 
+
+biolengthbias2 = dat(biodata_rl, factor = "sample", type = "lengthbias")
+
+par(mfrow = c(3, 3), mai = c(0.5,0.5, 0.3, 0.3))
+for (i in 1:ncol(biocounts)){
+  explo.plot(biolengthbias2, samples = i, toplot = "global")
+}
+
+```
+
+```{r}
+#QCreport(biodata,samples = NULL, factor = myfactors, norm = FALSE)
+myRPKM_iso = rpkm(assayData(biodata_iso)$exprs, long = mylength, k = 0, lc = 1)
+
+biodata2_iso <- readData(data = myRPKM_iso, length = mylength, 
+                          gc = mygc*100, factors = myfactors) 
+biolengthbias_iso = dat(biodata2_iso, factor = "sample", type = "lengthbias")
+
+par(mfrow = c(3, 3), mai = c(0.5,0.5, 0.3, 0.3))
+for (i in 1:ncol(biocounts)){
+  explo.plot(biolengthbias_iso, samples = i, toplot = "global")
+}
+```
+
+
+```{r, eval=TRUE, results='hide'}
+SC_lengthbias <- list()
+for (i in names(SCcounts)){
+  tryCatch({
+    SC_lengthbias[[i]] <- dat(SCdata[[i]], factor = "sample", type = "GCbias")
+  },
+  error = function(x){})
+}
+```
+
+```{r, results='asis', fig.cap = "Figure. Transcript length bias by sample plotted with NOISeq for mouse current SC transcripts. The length is divided into intervals (bins) containing 200 features, and the middle point of each bin is depicted on the X-axis. For each bin, the 5% trimmed mean of the corresponding expression values (CPM if norm=FALSE or values provided if norm=TRUE) is computed and depicted on the Y-axis."}
+for (i in names(SC_lengthbias)){
+  cat(paste0("\n\n###### ", gsub("\n", "",names(SCcounts[i])), "\n\n"))
+  par(mfrow = c(3, 3), mai = c(0.3, 0.3, 0.3, 0.3))
+  for (j in 1:(ncol(SC_lengthbias[[i]]@dat$data2plot$global)-1)){
+    explo.plot(SC_lengthbias[[i]], samples = j, toplot = "global")
+  }
+}
+```
+
+
+
+
+### Bias detection {.tabset .tabset-pills}
+
+#### GC content {.tabset .tabset-pills}
+
+##### By Tissue {.tabset .tabset-dropdown}
+
+###### All
+
+```{r fig_gc_bias_all_tissue, eval=TRUE, fig.cap = "Figure. %GC content bias by tissue plotted with NOISeq for mouse transcripts. The GC content is divided into intervals (bins) containing 200 features. The middle point of each bin is depicted on the X-axis. For each bin, the 5% trimmed mean of the corresponding expression values is computed and depicted on the Y-axis."}
+explo.plot(dat(biodata_iso, factor = "cond", type = "GCbias"), samples = NULL, toplot = "global")
+```
+
+```{r, eval=TRUE, results='hide'}
+SC_GCbias <- list()
+for (i in names(SCcounts)){
+  tryCatch({
+    SC_GCbias[[i]] <- dat(SCdata[[i]], factor = "cond", type = "GCbias")
+  },
+  error = function(x){})
+}
+```
+
+```{r, eval=TRUE, results='asis', fig.cap = "Figure. %GC content bias by tissue plotted with NOISeq for mouse current SC transcripts. The GC content is divided into intervals (bins) containing 200 features. The middle point of each bin is depicted on the X-axis. For each bin, the 5% trimmed mean of the corresponding expression values is computed and depicted on the Y-axis."}
+for (i in names(SC_GCbias)){
+  cat(paste0("\n\n###### ", gsub("\n", "",names(SCcounts[i])), "\n\n"))
+  explo.plot(SC_GCbias[[i]], samples = NULL, toplot = "global")
+}
+```
+
+##### By Sample {.tabset .tabset-dropdown}
+
+###### All
+
+```{r fig_gc_bias_all_sample, eval=TRUE, fig.cap = "Figure. %GC content bias by sample plotted with NOISeq for mouse transcripts. The GC content is divided into intervals (bins) containing 200 features. The middle point of each bin is depicted on the X-axis. For each bin, the 5% trimmed mean of the corresponding expression values is computed and depicted on the Y-axis."}
+bioGCbias = dat(biodata_iso, factor = "sample", type = "GCbias")
+par(mfrow = c(3, 3), mai=c(0.55,0.5,0.3,0.3))
+for (i in 1:ncol(biocounts)){
+  explo.plot(bioGCbias, samples = i, toplot = "global")
+}
+```
+
+
+```{r, eval=TRUE, results='hide'}
+SC_GCbias <- list()
+for (i in names(SCcounts)){
+  tryCatch({
+    SC_GCbias[[i]] <- dat(SCdata[[i]], factor = "sample", type = "GCbias")
+  },
+  error = function(x){})
+}
+```
+
+```{r, eval=TRUE, results='asis', fig.cap = "Figure. %GC content bias by sample plotted with NOISeq for mouse transcripts by current SC. The GC content is divided into intervals (bins) containing 200 features. The middle point of each bin is depicted on the X-axis. For each bin, the 5% trimmed mean of the corresponding expression values is computed and depicted on the Y-axis."}
+for (i in names(SC_GCbias)){
+  cat(paste0("\n\n###### ", gsub("\n", "",names(SCcounts[i])), "\n\n"))
+  par(mfrow = c(2, 5), mai = c(0.3, 0.3, 0.3, 0.3))
+  for (j in 1:(ncol(SC_GCbias[[i]]@dat$data2plot$global)-1)){
+    NOISeq::explo.plot(SC_GCbias[[i]], samples = j, toplot = "global")
+  }
+}
+```
+
+#### Proportion of zeros {.tabset .tabset-pills}
+
+##### By Tissue {.tabset .tabset-dropdown}
+
+###### All
+
+```{r, eval=TRUE, fig.cap="Figure. Proportion of zero counts for each transcript by tissue. The length is divided in intervals containing 200 features and the meadian value of each bin is depicted in X axis. For each bin, the mean proportion of zeros is computed and depicted in Y axis. Transcripts not found in any sample of the analyzed tissue are not included."}
+# Function to generate plots for the proportion of zeros
+generate_zero_proportion_plots <- function(counts, gclength, title, observations_per_bin = 200) {
+  # Calculate the proportion of zero counts per transcript
+  zero_prop_data <- data.frame(
+    UJC = rownames(counts),
+    PropZero = apply(counts, 1, function(x) sum(x == 0) / length(x))
+  )
+
+  # Merge with transcript length data
+  zero_prop_data <- merge(zero_prop_data, gclength[, c("UJC", "median_lengths")], by = "UJC")
+  zero_prop_data <- zero_prop_data[order(zero_prop_data$median_lengths),]
+
+  # Remove transcripts with zero proportions equal to 1
+  zero_prop_data <- zero_prop_data[zero_prop_data$PropZero != 1, ]
+
+  # Calculate the number of bins needed
+  num_bins <- ceiling(length(zero_prop_data$median_lengths) / observations_per_bin)
+
+  # Create bins with a fixed number of observations
+  bins <- cut(
+      x = 1:length(zero_prop_data$median_lengths),
+      breaks = seq(1, length(zero_prop_data$median_lengths) + 1, by = observations_per_bin),
+      include.lowest = TRUE
+  )
+  bins[is.na(bins)] <- levels(bins)[length(levels(bins))]
+
+  # Convert the bin numbers to a categorical variable
+  zero_prop_data$length_bin <- as.factor(bins)
+
+  # Generate the plot
+  plot <- zero_prop_data %>% 
+    group_by(length_bin) %>% 
+    summarise(AvgPropZeros = mean(PropZero),
+              MedianLength = median(median_lengths)) %>%
+    ungroup() %>% 
+    ggplot(aes(MedianLength, AvgPropZeros)) +
+    geom_point() +
+    geom_smooth(method = "loess", span = 0.3) +
+    theme_minimal() +
+    ggtitle(title)  +
+    scale_y_continuous(limits = c(0, 0.30)) +
+    theme(axis.text = element_text(size = 10))
+
+  return(plot)
+}
+median_lengths <- as.data.frame(median_lengths)
+median_lengths$UJC <- rownames(LENGTH)
+p1 <- generate_zero_proportion_plots(biocounts[,1:3], median_lengths, "Brain")
+p2 <- generate_zero_proportion_plots(biocounts[,7:9], median_lengths, "Kidney")
+p3 <- generate_zero_proportion_plots(biocounts[,4:6], median_lengths, "Brain-Kidney") 
+miarrange_iso <- ggarrange(p1, p2, p3, ncol=3)
+miarrange_iso
+ggsave("miarrange_iso.png", miarrange_iso, width = 16, height = 5, units = "in")
+
+```
+
+```{r}
+# Function to generate plots for the proportion of zeros
+generate_zero_proportion_plots <- function(counts, gclength, title, observations_per_bin = 200) {
+  # Calculate the proportion of zero counts per transcript
+  zero_prop_data <- data.frame(
+    UJC = rownames(counts),
+    PropZero = apply(counts, 1, function(x) sum(x == 0) / length(x))
+  )
+
+  # Merge with transcript length data
+  zero_prop_data <- merge(zero_prop_data, gclength[, c("UJC", "median_lengths")], by = "UJC")
+  zero_prop_data <- zero_prop_data[order(zero_prop_data$median_lengths),]
+
+  # Remove transcripts with zero proportions equal to 1
+  zero_prop_data <- zero_prop_data[zero_prop_data$PropZero != 1, ]
+
+  # Calculate the number of bins needed
+  num_bins <- ceiling(length(zero_prop_data$median_lengths) / observations_per_bin)
+
+  # Create bins with a fixed number of observations
+  bins <- cut(
+      x = 1:length(zero_prop_data$median_lengths),
+      breaks = seq(1, length(zero_prop_data$median_lengths) + 1, by = observations_per_bin),
+      include.lowest = TRUE
+  )
+  bins[is.na(bins)] <- levels(bins)[length(levels(bins))]
+
+  # Convert the bin numbers to a categorical variable
+  zero_prop_data$length_bin <- as.factor(bins)
+
+  # Generate the plot
+  plot <- zero_prop_data %>% 
+    group_by(length_bin) %>% 
+    summarise(AvgPropZeros = mean(PropZero),
+              MedianLength = median(median_lengths)) %>%
+    ungroup() %>% 
+    ggplot(aes(MedianLength, AvgPropZeros)) +
+    geom_point() +
+    geom_smooth(method = "loess", span = 0.3) +
+    theme_minimal() +
+    ggtitle(title)  +
+    scale_y_continuous(limits = c(0, 0.30)) +
+    theme(axis.text = element_text(size = 10))
+
+  return(plot)
+}
+median_ref_lengths <- as.data.frame(median_ref_lengths)
+median_ref_lengths$UJC <- rownames(LENGTH)
+names(median_ref_lengths) <- c("median_lengths","UJC")
+p1 <- generate_zero_proportion_plots(biocounts[,1:3], median_ref_lengths, "Brain")
+p2 <- generate_zero_proportion_plots(biocounts[,7:9], median_ref_lengths, "Kidney")
+p3 <- generate_zero_proportion_plots(biocounts[,4:6], median_ref_lengths, "Brain-Kidney") 
+miarrange_iso_ref_length <- ggarrange(p1, p2, p3, ncol=3)
+miarrange_iso_ref_length
+ggsave("miarrange_iso_ref_length.png", miarrange_iso_ref_length, width = 16, height = 5, units = "in")
+
+```
+
+###### FSM
+
+```{r, fig.cap="Figure. Proportion of zero counts for each FSM transcript by tissue. The length is divided in intervals containing 200 features and the meadian value of each bin is depicted in X axis. For each bin, the mean proportion of zeros is computed and depicted in Y axis. Transcripts not found in any sample of the analyzed tissue are not included."}
+p1 <- generate_zero_proportion_plots(FSMbiocounts[,1:3], median_lengths, "Brain")
+p2 <- generate_zero_proportion_plots(FSMbiocounts[,7:9], median_lengths, "Kidney")
+p3 <- generate_zero_proportion_plots(FSMbiocounts[,4:6], median_lengths, "Brain-Kidney") 
+ggarrange(p1, p2, p3)
+```
+
+#### ggplot2 plot
+
+```{r, eval=TRUE, fig.cap="Figure. PCA of mouse and SIRV transcript raw expression values. On the top panel only for FSM transcripts and bottom panel for all transcripts."}
+# Function to perform PCA analysis
+perform_pca_analysis <- function(counts, tissue_ids, batch_ids, tittle) {
+  pca_data <- as.data.frame(t(counts))
+  pca_data$tissue <- tissue_ids
+  pca_data$batch <- batch_ids
+  #print(pca_data)
+  pca_res <- prcomp(pca_data[,2:(ncol(pca_data)-2)], scale. = FALSE)
+  pca_plot <- autoplot(pca_res, data = pca_data, colour = 'tissue', shape = "batch", size = 4) +
+    theme_minimal() +
+    ggtitle(tittle) + 
+    scale_color_conesa() +
+    theme(axis.text = element_text(size = 10))
+  
+  return(pca_plot)
+}
+
+tissue_ids <- substr(colnames(FSMbiocounts),1,2)
+batch_id <- as.character(c(1,1,1,1,1,1,1,1,1))
+p1 <- perform_pca_analysis(FSMbiocounts, tissue_ids, batch_id, "Mouse FSM transcripts")
+p3 <- perform_pca_analysis(biocounts, tissue_ids, batch_id, "Mouse transcripts")
+
+ggarrange(p1,p3, common.legend = T, legend = "bottom")
+bioPCA = dat(biodata_iso, type = "PCA")
+par(mfrow = c(1, 2), mai=c(0.8,0.8,0.8,0.8))
+explo.plot(bioPCA, factor = "cond")
+explo.plot(bioPCA, factor = "batch")
+mtext("Sample transcripts", side = 3, line = -1, outer = T)
+
+```
+
+
+
+# MAS - Seq Results 
+
+
+```{r}
+
+# Extraer las columnas NAME y CO de cada dataframe en la lista
+lista_subset <- lapply(data_class_Mas_Seq_2, function(df) df[, c("UJC", "FL")])
+
+# Filtrar los nombres comunes de la columna NAME
+#comunes <- c(comunes_brain, comunes_kidney, comunes_mix)
+lista_filtered <- lapply(lista_subset, function(df) merge(data.frame(UJC = unique(comunes)), df, all.x = TRUE, by = "UJC"))
+
+# Unir las columnas NAME y CO de cada dataframe filtrado
+biocounts2 <- Reduce(function(x, y) merge(x, y, by = "UJC", all = TRUE), lista_filtered)
+biocounts2[is.na(biocounts2)] <- 0  # Reemplazar NA por 0
+
+# Renombrar las columnas
+colnames(biocounts2) <- c("UJC", sub("\\_.*", "", names(data_class_Mas_Seq_2)))
+
+rownames(biocounts2) <- biocounts2$UJC
+biocounts2 <- subset(biocounts2, select = -UJC)
+
+# Extraer las columnas NAME y CO de cada dataframe en la lista
+lista_subset <- lapply(data_class_Mas_Seq_2, function(df) df[, c("UJC", "gc_cont")])
+
+# Filtrar los nombres comunes de la columna NAME
+#comunes <- c(comunes_brain, comunes_kidney, comunes_mix)
+lista_filtered <- lapply(lista_subset, function(df) merge(data.frame(UJC = unique(comunes)), df, all.x = TRUE, by = "UJC"))
+
+# Unir las columnas NAME y CO de cada dataframe filtrado
+GC <- Reduce(function(x, y) merge(x, y, by = "UJC", all = TRUE), lista_filtered)
+GC[is.na(GC)] <- 0  # Reemplazar NA por 0
+
+# Renombrar las columnas
+colnames(GC) <- c("UJC", sub("\\_.*", "", names(data_class_Mas_Seq_2)))
+
+rownames(GC) <- GC$UJC
+GC <- subset(GC, select = -UJC)
+
+# Extraer las columnas NAME y CO de cada dataframe en la lista
+lista_subset <- lapply(data_class_Mas_Seq_2, function(df) df[, c("UJC", "ref_length")])
+
+# Filtrar los nombres comunes de la columna NAME
+#comunes <- c(comunes_brain, comunes_kidney, comunes_mix)
+lista_filtered <- lapply(lista_subset, function(df) merge(data.frame(UJC = unique(comunes)), df, all.x = TRUE, by = "UJC"))
+
+# Unir las columnas NAME y CO de cada dataframe filtrado
+R_LENGTH <- Reduce(function(x, y) merge(x, y, by = "UJC", all = TRUE), lista_filtered)
+R_LENGTH[is.na(R_LENGTH)] <- 0  # Reemplazar NA por 0
+
+# Renombrar las columnas
+colnames(R_LENGTH) <- c("UJC", sub("\\_.*", "", names(data_class_Mas_Seq_2)))
+
+rownames(R_LENGTH) <- R_LENGTH$UJC
+R_LENGTH <- subset(R_LENGTH, select = -UJC)
+
+head(R_LENGTH)
+
+
+# Extraer las columnas NAME y CO de cada dataframe en la lista
+lista_subset <- lapply(data_class_Mas_Seq_2, function(df) df[, c("UJC", "length")])
+
+# Filtrar los nombres comunes de la columna NAME
+#comunes <- c(comunes_brain, comunes_kidney, comunes_mix)
+lista_filtered <- lapply(lista_subset, function(df) merge(data.frame(UJC = unique(comunes)), df, all.x = TRUE, by = "UJC"))
+
+# Unir las columnas NAME y CO de cada dataframe filtrado
+LENGTH <- Reduce(function(x, y) merge(x, y, by = "UJC", all = TRUE), lista_filtered)
+LENGTH[is.na(LENGTH)] <- 0  # Reemplazar NA por 0
+
+# Renombrar las columnas
+colnames(LENGTH) <- c("UJC", sub("\\_.*", "", names(data_class_Mas_Seq_2)))
+
+rownames(LENGTH) <- LENGTH$UJC
+LENGTH <- subset(LENGTH, select = -UJC)
+
+head(LENGTH)
+
+library(matrixStats)
+median_ref_lengths <- apply(R_LENGTH, 1, function(row) median(row[row != 0])) #rowMedians(as.matrix(R_LENGTH))
+median_lengths <- apply(LENGTH, 1, function(row) median(row[row != 0])) #rowMedians(as.matrix(LENGTH))
+mean_gc <- apply(GC, 1, function(row) mean(row[row != 0])) #rowMedians(as.matrix(GC))
+```
+
+
+```{r}
+get_count <- function(quant_file, structural_category = NULL, classification = NULL) { 
+  mycounts <- quant_file
+  # Filter for specific structural categories if provided
+  if (!is.null(structural_category)) {
+    mycounts <- mycounts[rownames(mycounts) %in% classification$UJC[classification$structural_category == structural_category], ]
+  }
+  return(mycounts)
+} 
+
+# Extraer las columnas FL y UJC de cada dataframe en la lista
+lista_cat <- lapply(data_class_Mas_Seq_2, function(df) df[, c("UJC", "structural_category")])
+lista_filtered_cat <- lapply(lista_cat, function(df) merge(data.frame(UJC = unique(comunes)), df, all.x = TRUE, by = "UJC"))
+CATs <- Reduce(function(x, y) merge(x, y, by = "UJC", all = TRUE), lista_filtered_cat)
+elemento_mas_frecuente <- function(fila) {
+  tabla <- table(fila)
+  elemento <- names(tabla)[which.max(tabla)]
+  return(elemento)
+} 
+elementos_mas_frecuentes <- apply(CATs[, -1], 1, elemento_mas_frecuente) 
+nueva_class <- data.frame(UJC = CATs$UJC, structural_category = elementos_mas_frecuentes)
+nueva_class$structural_category <- factor(nueva_class$structural_category,
+                                              labels = xaxislabelsF1,
+                                              levels = xaxislevelsF1,
+                                              ordered=TRUE) 
+mycounts_quant_ind <- biocounts2 
+FSMbiocounts <- get_count(mycounts_quant_ind, classification = nueva_class, structural_category = "FSM")
+dim(FSMbiocounts)
+
+```
+
+
+```{r, eval=TRUE}
+
+# Factors
+myfactors <- data.frame(
+  cond = c(rep("brain", 3), rep("brain_kidney", 3), rep("kidney", 3)), 
+  batch = c(rep("1", 3), rep("1", 3), rep("1", 3))
+)
+myfactors$cond_batch <- paste0(myfactors$cond, "_", myfactors$batch)
+myfactors$sample <- colnames(biocounts2) 
+
+```
+
+
+#### Length bias {.tabset .tabset-pills}
+
+##### By Tissue {.tabset .tabset-dropdown}
+
+###### All
+
+```{r fig_length_bias_all_tissue_mas, eval=TRUE,  fig.cap = "Figure. Transcript length bias by tissue plotted with NOISeq for mouse transcripts. The length is divided into intervals (bins) containing 200 features, and the middle point of each bin is depicted on the X-axis. For each bin, the 5% trimmed mean of the corresponding expression values (CPM if norm=FALSE or values provided if norm=TRUE) is computed and depicted on the Y-axis."}
+explo.plot(dat(biodata, factor = "cond", type = "lengthbias"), samples = NULL, toplot = "global")
+```
+
+```{r, eval=TRUE, results='hide'}
+SC_lengthbias <- list()
+for (i in names(SCcounts)){
+  tryCatch({
+    SC_lengthbias[[i]] <- dat(SCdata[[i]], factor = "cond", type = "lengthbias")
+  },
+  error = function(x){})
+}
+```
+
+```{r, eval=TRUE, results='asis', fig.cap = "Figure. %GC content bias by tissue plotted with NOISeq for mouse current SC transcripts. The GC content is divided into intervals (bins) containing 200 features. The middle point of each bin is depicted on the X-axis. For each bin, the 5% trimmed mean of the corresponding expression values is computed and depicted on the Y-axis."}
+ for (i in names(SC_lengthbias)){
+   cat(paste0("\n\n###### ", gsub("\n", "",names(SCcounts[i])), "\n\n"))
+   explo.plot(SC_lengthbias[[i]], samples = NULL, toplot = "global")
+ }
+```
+
+##### By sample {.tabset .tabset-dropdown}
+
+###### All
+
+
+```{r fig_length_bias_all_sample_mas, eval=TRUE, fig.cap = "Figure. Transcript length bias by sample plotted with NOISeq for mouse transcripts. The length is divided into intervals (bins) containing 200 features, and the middle point of each bin is depicted on the X-axis. For each bin, the 5% trimmed mean of the corresponding expression values (CPM if norm=FALSE or values provided if norm=TRUE) is computed and depicted on the Y-axis."}
+
+mylength <- median_lengths
+names(mylength) <- rownames(LENGTH)
+mygc <- mean_gc
+names(mygc) <- rownames(GC)
+
+biodata_mas <- readData(data = biocounts2, length = mylength, 
+                          gc = mygc*100, factors = myfactors) 
+
+biolengthbias = dat(biodata_mas, factor = "sample", type = "lengthbias")
+
+par(mfrow = c(3, 3), mai = c(0.5,0.5, 0.3, 0.3))
+for (i in 1:ncol(biocounts2)){
+  explo.plot(biolengthbias, samples = i, toplot = "global")
+}
+
+mylength_r <- as.numeric(median_ref_lengths)
+names(mylength_r) <- rownames(R_LENGTH)
+
+biodata_r <- readData(data = biocounts2, length = mylength_r[mylength_r < 9000], 
+                          gc = mygc*100, factors = myfactors) 
+
+biolengthbias = dat(biodata_r, factor = "sample", type = "lengthbias")
+
+par(mfrow = c(3, 3), mai = c(0.5,0.5, 0.3, 0.3))
+for (i in 1:ncol(biocounts2)){
+  explo.plot(biolengthbias, samples = i, toplot = "global")
+}
+```
+
+```{r}
+#QCreport(biodata,samples = NULL, factor = myfactors, norm = FALSE)
+myRPKM_mas = rpkm(assayData(biodata_mas)$exprs, long = mylength, k = 0, lc = 1)
+
+biodata2_mas <- readData(data = myRPKM_mas, length = mylength, 
+                          gc = mygc*100, factors = myfactors) 
+biolengthbias_mas = dat(biodata2_mas, factor = "sample", type = "lengthbias")
+
+par(mfrow = c(3, 3), mai = c(0.5,0.5, 0.3, 0.3))
+for (i in 1:ncol(biocounts)){
+  explo.plot(biolengthbias_mas, samples = i, toplot = "global")
+}
+```
+
+```{r, eval=FALSE}
+
+cor(myRPKM_mas[, c(1)], myRPKM_mas[, c(1)],method ="spearman")
+
+correlation_plot <- function(myRPKM_iso, myRPKM_mas, c) {
+iso <- myRPKM_iso
+mas <- myRPKM_mas
+
+df_x <- data.frame(id = seq_along(iso), iso = iso)
+df_y <- data.frame(id = seq_along(mas), mas = mas)
+
+# Realizar la fusión de los dataframes
+merged_df <- merge(df_x, df_y, by = "id")
+
+
+datacor <- as.data.frame(merged_df)
+
+p_cor <- ggscatter(datacor, x = "mas", y = "iso",
+                     add = "reg.line", 
+                     color = "#15918A",#geom_point(colour = "#15918A", alpha=0.5),
+                     alpha = 0.5,
+                     #conf.int = TRUE,
+                     add.params = list(color = "#F58A53",
+                              fill = "lightgray"),
+                     title = "c",
+                     xlab = "MAS-seq UJC expression (log(CPM))", 
+                     ylab = "Iso-seq UJC expression (log(CPM))") + 
+    stat_cor(method = "spearman", color= "#F58A53", label.x = 3, label.y = 1)
+p_cor <- p_cor + geom_point(color =  "transparent") +
+    geom_abline(intercept = 0, slope = 1)
+p_cor
+}
+correlation_plot(myRPKM_iso[, c(1)], myRPKM_mas[, c(1)],"B31")
+
+```
+
+
+```{r, eval=TRUE, results='asis', fig.cap = "Figure. Transcript length bias by sample plotted with NOISeq for mouse current SC transcripts. The length is divided into intervals (bins) containing 200 features, and the middle point of each bin is depicted on the X-axis. For each bin, the 5% trimmed mean of the corresponding expression values (CPM if norm=FALSE or values provided if norm=TRUE) is computed and depicted on the Y-axis."}
+for (i in names(SC_lengthbias)){
+  cat(paste0("\n\n###### ", gsub("\n", "",names(SCcounts[i])), "\n\n"))
+  par(mfrow = c(2, 5), mai = c(0.3, 0.3, 0.3, 0.3))
+  for (j in 1:(ncol(SC_lengthbias[[i]]@dat$data2plot$global)-1)){
+    explo.plot(SC_lengthbias[[i]], samples = j, toplot = "global")
+  }
+}
+```
+
+
+
+
+### Bias detection {.tabset .tabset-pills}
+
+#### GC content {.tabset .tabset-pills}
+
+##### By Tissue {.tabset .tabset-dropdown}
+
+###### All
+
+```{r fig_gc_bias_all_tissue_mas, eval=TRUE, fig.cap = "Figure. %GC content bias by tissue plotted with NOISeq for mouse transcripts. The GC content is divided into intervals (bins) containing 200 features. The middle point of each bin is depicted on the X-axis. For each bin, the 5% trimmed mean of the corresponding expression values is computed and depicted on the Y-axis."}
+explo.plot(dat(biodata_mas, factor = "cond", type = "GCbias"), samples = NULL, toplot = "global")
+```
+
+```{r, eval=TRUE, results='hide'}
+SC_GCbias <- list()
+for (i in names(SCcounts)){
+  tryCatch({
+    SC_GCbias[[i]] <- dat(SCdata[[i]], factor = "cond", type = "GCbias")
+  },
+  error = function(x){})
+}
+```
+
+```{r, eval=TRUE, results='asis', fig.cap = "Figure. %GC content bias by tissue plotted with NOISeq for mouse current SC transcripts. The GC content is divided into intervals (bins) containing 200 features. The middle point of each bin is depicted on the X-axis. For each bin, the 5% trimmed mean of the corresponding expression values is computed and depicted on the Y-axis."}
+for (i in names(SC_GCbias)){
+  cat(paste0("\n\n###### ", gsub("\n", "",names(SCcounts[i])), "\n\n"))
+  explo.plot(SC_GCbias[[i]], samples = NULL, toplot = "global")
+}
+```
+
+##### By Sample {.tabset .tabset-dropdown}
+
+###### All
+
+```{r fig_gc_bias_all_sample_mas, eval=TRUE, fig.cap = "Figure. %GC content bias by sample plotted with NOISeq for mouse transcripts. The GC content is divided into intervals (bins) containing 200 features. The middle point of each bin is depicted on the X-axis. For each bin, the 5% trimmed mean of the corresponding expression values is computed and depicted on the Y-axis."}
+bioGCbias = dat(biodata_mas, factor = "sample", type = "GCbias")
+par(mfrow = c(3, 3), mai=c(0.55,0.5,0.3,0.3))
+for (i in 1:ncol(biocounts2)){
+  explo.plot(bioGCbias, samples = i, toplot = "global")
+}
+```
+
+
+```{r, eval=TRUE, results='hide'}
+SC_GCbias <- list()
+for (i in names(SCcounts)){
+  tryCatch({
+    SC_GCbias[[i]] <- dat(SCdata[[i]], factor = "sample", type = "GCbias")
+  },
+  error = function(x){})
+}
+```
+
+```{r, eval=TRUE, results='asis', fig.cap = "Figure. %GC content bias by sample plotted with NOISeq for mouse transcripts by current SC. The GC content is divided into intervals (bins) containing 200 features. The middle point of each bin is depicted on the X-axis. For each bin, the 5% trimmed mean of the corresponding expression values is computed and depicted on the Y-axis."}
+for (i in names(SC_GCbias)){
+  cat(paste0("\n\n###### ", gsub("\n", "",names(SCcounts[i])), "\n\n"))
+  par(mfrow = c(2, 5), mai = c(0.3, 0.3, 0.3, 0.3))
+  for (j in 1:(ncol(SC_GCbias[[i]]@dat$data2plot$global)-1)){
+    explo.plot(SC_GCbias[[i]], samples = j, toplot = "global")
+  }
+}
+```
+
+#### Proportion of zeros {.tabset .tabset-pills}
+
+##### By Tissue {.tabset .tabset-dropdown}
+
+###### All
+
+```{r, eval=TRUE, fig.cap="Figure. Proportion of zero counts for each transcript by tissue. The length is divided in intervals containing 200 features and the meadian value of each bin is depicted in X axis. For each bin, the mean proportion of zeros is computed and depicted in Y axis. Transcripts not found in any sample of the analyzed tissue are not included."}
+# Function to generate plots for the proportion of zeros
+generate_zero_proportion_plots <- function(counts, gclength, title, observations_per_bin = 200) {
+  # Calculate the proportion of zero counts per transcript
+  zero_prop_data <- data.frame(
+    UJC = rownames(counts),
+    PropZero = apply(counts, 1, function(x) sum(x == 0) / length(x))
+  )
+
+  # Merge with transcript length data
+  zero_prop_data <- merge(zero_prop_data, gclength[, c("UJC", "median_lengths")], by = "UJC")
+  zero_prop_data <- zero_prop_data[order(zero_prop_data$median_lengths),]
+
+  # Remove transcripts with zero proportions equal to 1
+  zero_prop_data <- zero_prop_data[zero_prop_data$PropZero != 1, ]
+
+  # Calculate the number of bins needed
+  num_bins <- ceiling(length(zero_prop_data$median_lengths) / observations_per_bin)
+
+  # Create bins with a fixed number of observations
+  bins <- cut(
+      x = 1:length(zero_prop_data$median_lengths),
+      breaks = seq(1, length(zero_prop_data$median_lengths) + 1, by = observations_per_bin),
+      include.lowest = TRUE
+  )
+  bins[is.na(bins)] <- levels(bins)[length(levels(bins))]
+
+  # Convert the bin numbers to a categorical variable
+  zero_prop_data$length_bin <- as.factor(bins)
+
+  # Generate the plot
+  plot <- zero_prop_data %>% 
+    group_by(length_bin) %>% 
+    summarise(AvgPropZeros = mean(PropZero),
+              MedianLength = median(median_lengths)) %>%
+    ungroup() %>% 
+    ggplot(aes(MedianLength, AvgPropZeros)) +
+    geom_point() +
+    geom_smooth(method = "loess", span = 0.3) +
+    theme_minimal() +
+    ggtitle(title)  +
+    scale_y_continuous(limits = c(0, 0.30)) +
+    theme(axis.text = element_text(size = 10))
+
+  return(plot)
+}
+median_lengths <- as.data.frame(median_lengths)
+median_lengths$UJC <- rownames(LENGTH)
+p1 <- generate_zero_proportion_plots(biocounts2[,1:3], median_lengths, "Brain")
+p2 <- generate_zero_proportion_plots(biocounts2[,7:9], median_lengths, "Kidney")
+p3 <- generate_zero_proportion_plots(biocounts2[,4:6], median_lengths, "Brain-Kidney")
+mi_arrange <- ggarrange(p1, p2, p3, ncol=3) 
+ggsave("mi_arrange_mas.png", mi_arrange, width = 16, height = 5, units = "in")
+mi_arrange
+
+```
+
+```{r}
+median_ref_lengths <- as.data.frame(median_ref_lengths)
+median_ref_lengths$UJC <- rownames(LENGTH)
+names(median_ref_lengths) <- c("median_lengths","UJC")
+p1 <- generate_zero_proportion_plots(biocounts2[,1:3], median_ref_lengths, "Brain")
+p2 <- generate_zero_proportion_plots(biocounts2[,7:9], median_ref_lengths, "Kidney")
+p3 <- generate_zero_proportion_plots(biocounts2[,4:6], median_ref_lengths, "Brain-Kidney") 
+miarrange_iso_ref_length <- ggarrange(p1, p2, p3, ncol=3)
+miarrange_iso_ref_length
+ggsave("miarrange_mas_ref_length.png", miarrange_iso_ref_length, width = 16, height = 5, units = "in")
+```
+
+
+###### FSM
+
+```{r, fig.cap="Figure. Proportion of zero counts for each FSM transcript by tissue. The length is divided in intervals containing 200 features and the meadian value of each bin is depicted in X axis. For each bin, the mean proportion of zeros is computed and depicted in Y axis. Transcripts not found in any sample of the analyzed tissue are not included."}
+p1 <- generate_zero_proportion_plots(FSMbiocounts[,1:3], median_lengths, "Brain")
+p2 <- generate_zero_proportion_plots(FSMbiocounts[,7:9], median_lengths, "Kidney")
+p3 <- generate_zero_proportion_plots(FSMbiocounts[,4:6], median_lengths, "Brain-Kidney") 
+ggarrange(p1, p2, p3)
+```
+
+#### ggplot2 plot
+
+```{r, eval=TRUE, fig.cap="Figure. PCA of mouse and SIRV transcript raw expression values. On the top panel only for FSM transcripts and bottom panel for all transcripts."}
+# Function to perform PCA analysis
+perform_pca_analysis <- function(counts, tissue_ids, batch_ids, tittle) {
+  pca_data <- as.data.frame(t(counts))
+  pca_data$tissue <- tissue_ids
+  pca_data$batch <- batch_ids
+  #print(pca_data)
+  pca_res <- prcomp(pca_data[,2:(ncol(pca_data)-2)], scale. = FALSE)
+  pca_plot <- autoplot(pca_res, data = pca_data, colour = 'tissue', shape = "batch", size = 4) +
+    theme_minimal() +
+    ggtitle(tittle) + 
+    scale_color_conesa() +
+    theme(axis.text = element_text(size = 10))
+  
+  return(pca_plot)
+}
+
+tissue_ids <- substr(colnames(FSMbiocounts),1,2)
+batch_id <- as.character(c(1,1,1,1,1,1,1,1,1))
+p1 <- perform_pca_analysis(FSMbiocounts, tissue_ids, batch_id, "Mouse FSM transcripts")
+p3 <- perform_pca_analysis(biocounts, tissue_ids, batch_id, "Mouse transcripts")
+
+ggarrange(p1,p3, common.legend = T, legend = "bottom")
+bioPCA2 = dat(biodata_mas, type = "PCA")
+par(mfrow = c(1, 2), mai=c(0.8,0.8,0.8,0.8))
+explo.plot(bioPCA2, factor = "cond")
+explo.plot(bioPCA2, factor = "batch")
+mtext("Sample transcripts", side = 3, line = -1, outer = T)
+
+par(mfrow = c(1, 2), mai=c(0.8,0.8,0.8,0.8))
+explo.plot(bioPCA, factor = "cond")
+explo.plot(bioPCA2, factor = "cond")
+mtext("Sample transcripts", side = 3, line = -1, outer = T)
+
+```
+
+
+
+# Shared Genes. Iso - Seq and MAS -Seq
+
+```{r}
+
+# Extraer las columnas NAME y CO de cada dataframe en la lista
+lista_subset <- lapply(data_class_Iso_Seq, function(df) df[, c("associated_gene")])
+
+list_names <- names(lista_subset)
+unique_elements <- unique(unlist(lista_subset))
+presence_matrix <- matrix(0, nrow = length(unique_elements), ncol = length(lista_subset),
+                          dimnames = list(unique_elements, list_names))
+
+for (i in seq_along(lista_subset)) {
+  presence_matrix[unique_elements %in% lista_subset[[i]], i] <- 1
+}
+
+dim(presence_matrix)
+presence_df1 <- as.data.frame(presence_matrix)
+
+# plot
+upset(presence_df, 
+      sets = colnames(presence_df), 
+      keep.order = TRUE, 
+      order.by = "freq", 
+      main.bar.color = "#FC8D59", 
+      sets.bar.color = "#78C679",   
+      number.angles = 55 ,
+      text.scale = c(2, 2, 2, 1.5, 2, 2))
+grid.text("Iso-Seq Observed Genes", x = 0.65, y=0.95, gp=gpar(fontsize=30)) 
+
+# Extraer las columnas NAME y CO de cada dataframe en la lista
+lista_subset_m <- lapply(data_class_Mas_Seq_2, function(df) df[, c("associated_gene")])
+
+list_names <- names(lista_subset_m)
+unique_elements <- unique(unlist(lista_subset_m))
+presence_matrix_m <- matrix(0, nrow = length(unique_elements), ncol = length(lista_subset_m),
+                          dimnames = list(unique_elements, list_names))
+
+for (i in seq_along(lista_subset_m)) {
+  presence_matrix_m[unique_elements %in% lista_subset_m[[i]], i] <- 1
+}
+
+dim(presence_matrix_m)
+presence_df_m <- as.data.frame(presence_matrix_m)
+
+# plot
+upset(presence_df_m, 
+      sets = colnames(presence_df), 
+      keep.order = TRUE, 
+      order.by = "freq", 
+      main.bar.color = "#FC8D59", 
+      sets.bar.color = "#78C679",  
+      number.angles = 55 ,
+      text.scale = c(1, 2, 2, 1.5, 2, 2))
+grid.text("Mas-Seq Observed Genes", x = 0.65, y=0.95, gp=gpar(fontsize=30)) 
+# 
+# Filtrar matrix mas-seq
+rownames_a <- rownames(presence_df)
+rownames_b <- rownames(presence_df_m)
+
+lista_combinada <- intersect(unlist(rownames_a), unlist(rownames_b)) 
+elementos_unicos <- unique(lista_combinada)
+# > length(elementos_unicos)
+# [1] 34839
+ 
+presence_df_filtered <- presence_df[rownames(presence_df) %in% elementos_unicos, ]  
+dim(presence_df_filtered)
+
+# plot
+upset(presence_df_filtered, 
+      sets = colnames(presence_df_filtered), 
+      keep.order = TRUE, 
+      order.by = "freq", 
+      main.bar.color = "#FC8D59", 
+      sets.bar.color = "#78C679",  
+      number.angles = 55 ,
+      text.scale = c(1, 2, 2, 1.5, 2, 2))
+grid.text("Iso-Seq Common Genes", x = 0.65, y=0.95, gp=gpar(fontsize=30))
+
+
+presence_df_m_filtered <- presence_df_m[rownames(presence_df_m) %in% elementos_unicos, ] 
+dim(presence_df_m_filtered)
+
+# plot
+upset(presence_df_m_filtered, 
+      sets = colnames(presence_df_m_filtered), 
+      keep.order = TRUE, 
+      order.by = "freq", 
+      main.bar.color = "#FC8D59", 
+      sets.bar.color = "#78C679",  
+      number.angles = 55 ,
+      text.scale = c(1, 2, 2, 1.5, 2, 2)) 
+grid.text("Mas-Seq Common Genes", x = 0.65, y=0.95, gp=gpar(fontsize=30))
+
+plot.ls <- list(
+    p1 = upset(presence_df_m, 
+               sets = colnames(presence_df), 
+               keep.order = TRUE, 
+               order.by = "freq",  
+               mainbar.y.label = "Gene Count", 
+              sets.x.label = "Sample Size",
+               main.bar.color = "#FC8D59", 
+               sets.bar.color = "#78C679",  
+              show.numbers =FALSE,
+               number.angles = 55 ,
+              mainbar.y.max = 20000,
+               text.scale = c(1, 1, 1, 1, 1, 1),
+              set_size.scale_max = 75000),
+    p2 = upset(presence_df, 
+               sets = colnames(presence_df),
+               keep.order = TRUE, 
+               order.by = "freq",   
+               mainbar.y.label = "Gene Count", 
+              sets.x.label = "Sample Size",
+               main.bar.color = "#FC8D59", 
+               sets.bar.color = "#78C679",  
+              show.numbers =FALSE,
+               number.angles = 55 ,
+              mainbar.y.max = 20000,
+               text.scale = c(1, 1, 1, 1, 1, 1),
+              set_size.scale_max = 75000),
+    p3 = upset(presence_df_m_filtered, 
+               sets = colnames(presence_df), 
+               keep.order = TRUE, 
+               order.by = "freq",  
+               mainbar.y.label = "Gene Count", 
+              sets.x.label = "Sample Size",
+               main.bar.color = "#FC8D59", 
+               sets.bar.color = "#78C679",
+              show.numbers =FALSE,  
+               number.angles = 55 ,
+              mainbar.y.max = 20000,
+               text.scale = c(1, 1, 1, 1, 1, 1),
+              set_size.scale_max = 75000),
+    p4 = upset(presence_df_filtered, 
+              sets = colnames(presence_df), #
+              keep.order = TRUE, 
+              order.by = "freq", 
+              mainbar.y.label = "Gene Count", 
+              sets.x.label = "Sample Size",
+              main.bar.color = "#FC8D59", 
+              sets.bar.color = "#78C679",
+              show.numbers =FALSE,
+              number.angles = 55 ,
+              mainbar.y.max = 20000,
+              text.scale = c(1, 1, 1, 1, 1, 1),
+              set_size.scale_max = 75000) 
+)
+names(plot.ls) <- c("MAS-Seq_Observed_Genes", "Iso-Seq_Observed_Genes","MAS-Seq_Common_Genes", "Iso-Seq_Common_Genes")
+for (v in names(plot.ls)) {
+     
+     print(plot.ls[[v]]) 
+     grid.text(v, x = 0.65, y=0.97, gp = gpar(fontsize = 15))
+     grid.edit('arrange', name = v)
+     vp <- grid.grab()
+     plot.ls[[v]] <- vp
+}
+grid.arrange(grobs = plot.ls, ncol = 2)
+
+```
+
