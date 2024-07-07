@@ -1,0 +1,1749 @@
+
+
+```{r Libraries, warning = 'FALSE', error = 'FALSE', echo = 'FALSE', results = 'hide', message ='FALSE'}
+# 
+library(ggplot2)
+library(ggplotify)
+library(plyr)
+library(plotly) 
+library(tidyverse)
+library(kableExtra)
+library(ggpubr) 
+library(dplyr)
+library(data.table) 
+library(knitr)
+library(UpSetR)
+library(stringr)
+library(ggplot2)
+library(scales)
+
+```
+
+
+```{r Colors and themes, messages=FALSE, warning='FALSE', error='FALSE', echo='FALSE'}
+
+
+cat.palette = c("FSM"="#6BAED6", "ISM"="#FC8D59", "NIC"="#78C679", 
+                "NNC"="#EE6A50", "Genic\nGenomic"="#969696", "Antisense"="#66C2A4", "Fusion"="goldenrod1",
+                "Intergenic" = "darksalmon", "Genic\nIntron"="#41B6C4")
+
+subcat.palette = c("Alternative 3'end"='#02314d', 
+                   "Alternative 3'5'end"='#0e5a87',
+                   "Alterantive 5'end"='#7ccdfc',
+                   'Reference match'='#c4e1f2',
+                   "3' fragment"='#c4531d',
+                   "Internal fragment"='#e37744',  
+                   "5' fragment"='#e0936e', 
+                   "Comb. of annot. junctions"='#014d02',
+                   "Comb. of annot. splice sites"='#379637',  
+                   "Intron retention"='#81eb82', 
+                   "Not comb. of annot. junctions"='#6ec091',
+                   "Mono-exon by intron ret."='#4aaa72',
+                   "At least 1 annot. don./accept."='#32734d',
+                   "Mono-exon"='#cec2d2',
+                   "Multi-exon"='#876a91')
+
+mytheme <- theme_classic(base_family = "Helvetica") +
+  theme(axis.line.x = element_line(color="black", size = 0.4),
+        axis.line.y = element_line(color="black", size = 0.4)) +
+  theme(axis.title.x = element_text(size=13),
+        axis.text.x  = element_text(size=12),
+        axis.title.y = element_text(size=13),
+        axis.text.y  = element_text(vjust=0.5, size=12) ) +
+  theme(legend.text = element_text(size = 11), legend.title = element_text(size=12), legend.key.size = unit(0.5, "cm")) +
+  theme(plot.title = element_text(lineheight=.4, size=15, hjust = 0.5)) +
+  theme(plot.margin = unit(c(2.5,1,1,1), "cm"))
+
+xaxislevelsF1 <- c("full-splice_match","incomplete-splice_match","novel_in_catalog","novel_not_in_catalog", "genic","antisense","fusion","intergenic","genic_intron");
+xaxislabelsF1 <- c("FSM", "ISM", "NIC", "NNC", "Genic\nGenomic",  "Antisense", "Fusion","Intergenic", "Genic\nIntron")
+
+subc.levels=c("alternative_3end",'alternative_3end5end', "alternative_5end","reference_match", "3prime_fragment","internal_fragment", "5prime_fragment","combination_of_known_junctions", "combination_of_known_splicesites", "intron_retention","no_combination_of_known_junctions", "mono-exon_by_intron_retention", "at_least_one_novel_splicesite", "mono-exon", "multi-exon")
+subc.labels=c("Alternative 3'end", "Alternative 3'5'end", "Alterantive 5'end", "Reference match", "3' fragment", "Internal fragment", "5' fragment", "Comb. of annot. junctions", "Comb. of annot. splice sites", "Intron retention", "Not comb. of annot. junctions", "Mono-exon by intron ret.", "At least 1 annot. don./accept.", "Mono-exon", "Multi-exon")
+
+```
+
+## Long Read Sequencing Analysis 
+
+This analysis aims to characterize the Iso seq and Mas -seq sequencing based on the analysis of the full length reads obtained through the pacbio workflow and quality control data obtained by SQANTI3.
+
+## Iso-Seq and Mas-Seq SMRTcell performance
+
+#### from files
+
+```{r}
+ruta <- "files/classification"
+archivos_iso <- list.files(path = ruta, full.names = TRUE)
+ruta <- "files/classification"
+archivos_mas <- list.files(path = ruta, full.names = TRUE)
+
+read_struct <- function(file, texto) {
+  df <- fread(file, select = c(1, 8)) # 8
+  df2 <- as.data.frame(table(df$structural_category))
+  colnames(df2) <- c("Category","Counts")
+  df2$Sample <- gsub("_classification.txt", "", basename(file))
+  df2$Seq <- texto
+  return(df2)
+}
+
+lista_dfs <- lapply(archivos_iso, read_struct, texto = "Iso_Seq")
+df_iso <- do.call(rbind, lista_dfs)
+
+lista_dfs <- lapply(archivos_mas, read_struct, texto = "Mas_Seq")
+df_mas <- do.call(rbind, lista_dfs)
+
+datos <- rbind(df_iso, df_mas) 
+head(datos)
+```
+
+#### Categories Iso-Seq
+
+```{r Isoseq Categories, warning=FALSE, error=FALSE, echo=FALSE}
+datos = read.table("files/iso/isoseq_categorias_conteo.txt", header=T, as.is=T, sep="")
+datosn <- data.frame(
+  count = datos$Count,
+  sample = datos$Sample) 
+datos_stack_iso <- datosn %>%
+  group_by(sample) %>%
+  mutate(porcentaje = (count / sum(count)) * 100) 
+datos_stack_iso$categoria<-datos$Category 
+
+datos_stack_iso$categoria = factor(datos_stack_iso$categoria,
+                               labels = xaxislabelsF1,
+                               levels = xaxislevelsF1,
+                               ordered=TRUE)
+
+p1 <- ggplot(datos_stack_iso, aes(x = sample, y = porcentaje, fill = categoria, label = paste0(round(porcentaje, 0), "%"))) +
+  geom_bar(stat="identity", color="black", size=0.3, width=0.7) + 
+  scale_x_discrete(drop=FALSE) +
+  xlab("") +
+  mytheme +
+  geom_text(size = 3, position = position_stack(vjust = 0.5)) + 
+  ylab("Transcripts, %") +
+  #mytheme +
+  theme(axis.text.x = element_text(angle = 0)) +
+  scale_fill_manual(values = cat.palette, guide='none') +
+  ggtitle("ISO-seq\n\n" ) +
+  theme(axis.title.x=element_blank()) +  
+  theme(axis.text.x  = element_text(margin=ggplot2::margin(17,0,0,0), size=12)) +
+  scale_y_continuous(expand=expansion(mult = c(0,0.1))) +
+  theme(legend.justification=c(1,1), legend.position=c(1,1))+
+  theme(plot.margin = margin(0.5,0,0,0, 'cm'))
+ggplotly(p1)
+
+ggsave("plots/cat_iso.svg", plot = p1, device = "svg")
+```
+
+#### Categories MAS-Seq
+
+```{r Mas-Seq R2 Categories 3 samples, warning=FALSE, error=FALSE, echo=FALSE}
+
+datos = read.table("files/mas2/masseq_categorias_conteo.txt", header=T, as.is=T, sep="")
+datosn <- data.frame(
+  count = datos$Count,
+  sample = datos$Sample) 
+datos_stack_mas <- datosn %>%
+  group_by(sample) %>%
+  mutate(porcentaje = (count / sum(count)) * 100) 
+datos_stack_mas$categoria<-datos$Category
+datos_stack_mas$sample <-gsub("-round2", "", datos_stack_mas$sample)
+datos_stack_mas$sample <-gsub("BK20_80_", "BK2080", datos_stack_mas$sample)
+
+datos_stack_mas$categoria = factor(datos_stack_mas$categoria,
+                               labels = xaxislabelsF1,
+                               levels = xaxislevelsF1,
+                               ordered=TRUE)
+
+p3 <- ggplot(datos_stack_mas, aes(x = sample, y = porcentaje, fill = categoria, label = paste0(round(porcentaje, 0), "%"))) +
+  geom_bar(stat="identity", color="black", size=0.3, width=0.7) + 
+  scale_x_discrete(drop=FALSE) +
+  xlab("") +
+  mytheme +
+  geom_text(size = 3, position = position_stack(vjust = 0.5)) + 
+  ylab("Transcripts, %") +
+  #mytheme +
+  theme(axis.text.x = element_text(angle = 0)) +
+  scale_fill_manual(values = cat.palette, guide='none') +
+  ggtitle("MAS-Seq\n\n" ) +
+  theme(axis.title.x=element_blank()) +  
+  theme(axis.text.x  = element_text(margin=ggplot2::margin(17,0,0,0), size=12)) +
+  scale_y_continuous(expand=expansion(mult = c(0,0.1))) +
+  theme(plot.margin = margin(0.5,0,0,0, 'cm'))#+
+  #theme(legend.justification=c(1,1), legend.position=c(1,1))
+ggplotly(p3)
+
+p <- ggarrange(p1, p3, ncol = 1, heights = c(1,1))
+#print(p)
+
+ggsave("plots/cat_mas2_3.svg.svg", plot = p3, device = "svg") 
+```
+
+#### Average percentajes by categories
+
+```{r}
+#| label: tbl-tables
+#| tbl-cap: "Tabl"
+#| tbl-subcap:
+#|   - "Iso-Seq"
+#|   - "MAS-Seq"
+#| layout-ncol: 2
+
+avg_cat <- function(datos_stack) {
+  result <- datos_stack %>%
+      mutate(
+          grupo = case_when(
+              grepl("^B3", sample) ~ "Brain",
+              grepl("^BK2", sample) ~ "Mix-BK",
+              grepl("^K3", sample) ~ "Kidney",
+              TRUE ~ sample  # Mantener otros valores sin cambios
+          )
+      ) %>%
+      filter(grupo %in% c("Brain", "Mix-BK", "Kidney")) %>%
+      group_by(grupo, categoria) %>%
+      summarise(
+          avg_percent = round(mean(porcentaje, na.rm = TRUE), 2),
+          .groups = 'drop'
+      ) %>%
+      rename(sample = grupo)  %>%
+      mutate(sample = factor(sample, levels = c("Brain", "Mix-BK", "Kidney")))
+  #print(result)
+  result <- result %>%
+    arrange(sample)
+  
+  result_wide <- result %>%
+      pivot_wider(names_from = sample, values_from = avg_percent, names_prefix = "avg. % ")
+  #print(result_wide) 
+  result_wide <- result_wide %>%
+    rename(Category = categoria) 
+
+  return(result_wide)
+}
+
+resultado <- avg_cat(datos_stack_iso)
+
+kbl(resultado, caption="Iso - Seq") %>%
+kable_classic(full_width = F, html_font = "Cambria")
+
+resultado <- avg_cat(datos_stack_mas)
+
+kbl(resultado, caption="MAS - Seq") %>%
+kable_classic(full_width = F, html_font = "Cambria")
+
+```
+
+
+#### Subcategories Iso-Seq
+
+```{r Iso-seq Subcategories, warning=FALSE, error=FALSE, echo=FALSE}
+
+datos = read.table("files/iso/isoseq_subcategorias_conteo.txt", header=T, as.is=T, sep="")
+datosn <- data.frame(
+  count = datos$Count,
+  sample = datos$Sample) 
+datos_stack_iso <- datosn %>%
+  group_by(sample) %>%
+  mutate(porcentaje = (count / sum(count)) * 100) 
+datos_stack_iso$subcategoria<-datos$Subcategory
+datos_stack_iso$sample <-gsub("_classification_head.txt", "", datos_stack_iso$sample)
+
+datos_stack_iso$subcategoria = factor(datos_stack_iso$subcategoria,
+                                        labels = subc.labels,
+                                        levels = subc.levels,
+                                        ordered=TRUE)
+
+p1 <- ggplot(datos_stack_iso, aes(x = sample, y = porcentaje, fill = subcategoria, label = paste0(round(porcentaje, 0), "%"))) +
+  geom_bar(stat="identity", color="black", size=0.3, width=0.7) + 
+  scale_x_discrete(drop=FALSE) +
+  xlab("") +
+  mytheme +
+  geom_text(size = 3, position = position_stack(vjust = 0.5)) + 
+  ylab("Transcripts, %") +
+  #mytheme +
+  theme(axis.text.x = element_text(angle = 0)) +
+  scale_fill_manual(values = subcat.palette, guide='none') +
+  ggtitle("ISO-seq\n\n" ) +
+  theme(axis.title.x=element_blank()) +  
+  theme(axis.text.x  = element_text(margin=ggplot2::margin(17,0,0,0), size=12)) +
+  scale_y_continuous(expand=expansion(mult = c(0,0.1))) +
+  theme(legend.justification=c(1,1), legend.position=c(1,1))+
+  theme(plot.margin = margin(0.5,0,0,0, 'cm'))
+ggplotly(p1)
+
+ggsave("plots/Subcat_iso.svg", plot = p1, device = "svg")
+
+```
+
+#### Subcategories Mas-Seq
+
+```{r Mas-Seq R2 Subcategories 3 Samples, warning=FALSE, error=FALSE, echo=FALSE}
+
+datos = read.table("files/mas2/masseq_subcategorias_conteo.txt", header=T, as.is=T, sep="")
+datosn <- data.frame(
+  count = datos$Count,
+  sample = datos$Sample) 
+datos_stack_mas <- datosn %>%
+  group_by(sample) %>%
+  mutate(porcentaje = (count / sum(count)) * 100) 
+datos_stack_mas$subcategoria<-datos$Subategory 
+datos_stack_mas$sample <-gsub("-round2", "", datos_stack_mas$sample)
+datos_stack_mas$sample <-gsub("BK20_80_", "BK2080", datos_stack_mas$sample)
+datos_stack_mas$subcategoria = factor(datos_stack_mas$subcategoria,
+                                        labels = subc.labels,
+                                        levels = subc.levels,
+                                        ordered=TRUE)
+
+
+p3 <- ggplot(datos_stack_mas, aes(x = sample, y = porcentaje, fill = subcategoria, label = paste0(round(porcentaje, 0), "%"))) +
+  geom_bar(stat="identity", color="black", size=0.3, width=0.7) + 
+  scale_x_discrete(drop=FALSE) +
+  xlab("") +
+  mytheme +
+  geom_text(size = 3, position = position_stack(vjust = 0.5)) + 
+  ylab("Transcripts, %") +
+  #mytheme +
+  theme(axis.text.x = element_text(angle = 0)) +
+  scale_fill_manual(values = subcat.palette, guide='none') +
+  ggtitle("MAS-seq\n\n" ) +
+  theme(axis.title.x=element_blank()) +  
+  theme(axis.text.x  = element_text(margin=ggplot2::margin(17,0,0,0), size=12)) +
+  scale_y_continuous(expand=expansion(mult = c(0,0.1))) +
+  theme(legend.justification=c(1,1), legend.position=c(1,1))+
+  theme(plot.margin = margin(0.5,0,0,0, 'cm'))
+ggplotly(p3)
+
+p <- ggarrange(p1, p3, ncol = 1, heights = c(1,1))
+#print(p)
+
+ggsave("plots/subcat_mas2_3.svg.svg", plot = p, device = "svg")  
+
+```
+#### Average percentage by Subcategories
+
+```{r}
+#| label: tbl-tables
+#| tbl-cap: "Tabl"
+#| tbl-subcap:
+#|   - "Iso-Seq"
+#|   - "MAS-Seq"
+#| layout-ncol: 2
+
+avg_subcat <- function(datos_stack) {
+  result <- datos_stack %>%
+      mutate(
+          grupo = case_when(
+              grepl("^B3", sample) ~ "Brain",
+              grepl("^BK2", sample) ~ "Mix-BK",
+              grepl("^K3", sample) ~ "Kidney",
+              TRUE ~ sample  # Mantener otros valores sin cambios
+          )
+      ) %>%
+      filter(grupo %in% c("Brain", "Mix-BK", "Kidney")) %>%
+      group_by(grupo, subcategoria) %>%
+      summarise(
+          avg_percent = round(mean(porcentaje, na.rm = TRUE), 2),
+          .groups = 'drop'
+      ) %>%
+      rename(sample = grupo)  %>%
+      mutate(sample = factor(sample, levels = c("Brain", "Mix-BK", "Kidney")))
+  #print(result)
+  result <- result %>%
+    arrange(sample)
+  
+  result_wide <- result %>%
+      pivot_wider(names_from = sample, values_from = avg_percent, names_prefix = "avg. % ")
+  #print(result_wide) 
+  result_wide <- result_wide %>%
+    rename(Category = subcategoria) 
+
+  return(result_wide)
+}
+
+resultado <- avg_subcat(datos_stack_iso)
+
+kbl(resultado, caption="Iso - Seq") %>%
+kable_classic(full_width = F, html_font = "Cambria")
+
+resultado <- avg_subcat(datos_stack_mas)
+
+kbl(resultado, caption="MAS - Seq") %>%
+kable_classic(full_width = F, html_font = "Cambria")
+
+```
+
+## Length Distribution by tissue
+
+
+```{r Length distribution data, echo=FALSE, eval=FALSE}
+# Starting from length files by sample
+
+data_length <- function(fdata_isoseq, fdata_masseq, sample) {
+  l_Iso_seq <- read.table(file=fdata_isoseq,sep="\t",header=FALSE)
+  l_MAS_seq <- read.table(file=fdata_masseq,sep="\t",header=FALSE)
+  # Concatenas los dos df en un mismo df para el plot
+  l_all_FLNC_lengths<-rbind(l_MAS_seq,l_Iso_seq)
+  colnames(l_all_FLNC_lengths)<-c("seq","sample","length")
+  save(l_all_FLNC_lengths, file = paste(sample,"_all_FLNC_lengths.RData"))
+  return(l_all_FLNC_lengths)
+}
+
+# Llamar a la función con dos números
+B31_all_FLNC_lengths <- data_length( "C:/Users/edward/Downloads/CONESALAB/TFM/Conteos/n/B31_lengths_fl_Iso-Seq.txt", "C:/Users/edward/Downloads/CONESALAB/TFM/Conteos/n/B31_lengths_fl_MAS-Seq.txt", "B31")
+
+#.... 
+
+# All samples
+
+Iso_seq <- read.table(file="C:/Users/edward/Downloads/CONESALAB/TFM/Conteos/lengths_fl_isoseq.txt",sep="\t",header=TRUE)
+colnames(Iso_seq)<-c("seq","sample","length")
+Iso_seq_lengths <- ggpubr::ggboxplot(Iso_seq,x="sample",y="length",outlier.size=0.0001,fill="lightblue") + coord_cartesian(ylim=c(0,6000)) + geom_violin(alpha=0.5,fill="lightblue") +  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) + ylab("FLNC read length (# bases)") + theme(text=element_text(size=15)) + xlab("Iso-Seq sequencing") + theme(aspect.ratio=0.8)
+ggsave("plots/Iso_seq_lengths.svg", plot = Iso_seq_lengths, device = "svg") 
+ggsave("plots/Iso_seq_lengths.jpeg", pplot = Iso_seq_lengths, dpi=300, device = "jpeg")
+save(Iso_seq, Iso_seq_lengths, file = "Iso_seq_lengths.RData")
+rm(Iso_seq, Iso_seq_lengths)
+
+##2 round
+Mas_seq2 <- read.table(file="C:/Users/edward/Downloads/CONESALAB/TFM/Conteos/n/B31_B33_K31_lengths_fl_masseq.txt",sep="\t",header=TRUE)
+colnames(Mas_seq2)<-c("seq","sample","length")
+Mas_seq2_lengths <- ggpubr::ggboxplot(Mas_seq2,x="sample",y="length",outlier.size=0.0001,fill="lightblue") + coord_cartesian(ylim=c(0,6000)) + geom_violin(alpha=0.5,fill="lightblue") +  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) + ylab("FLNC read length (# bases)") + theme(text=element_text(size=15)) + xlab("MAS-seq sequencing round 2") + theme(aspect.ratio=0.8)
+ggsave("plots/Mas_seq2_lengths.svg", plot = Mas_seq2_lengths, device = "svg") 
+ggsave("plots/Mas_seq2_lengths.jpeg", pplot = Mas_seq2_lengths, dpi=300, device = "jpeg")
+save(Mas_seq2, Mas_seq2_lengths, file = "Mas_seq1_lengths.RData")
+rm(Mas_seq2, Mas_seq2_lengths)
+
+```
+
+
+```{r, Length distribution plots}
+
+load("B31_all_FLNC_lengths.RData")
+load("K32_all_FLNC_lengths.RData")
+load("BK20_80_3_all_FLNC_lengths.RData")
+
+length_plot <- function(all_FLNC_lengths) {
+  p_tissue <- ggpubr::ggboxplot(all_FLNC_lengths,x="seq",y="length",outlier.size=0.0001,alpha=0.5, fill="#15918A") + coord_cartesian(ylim=c(0,7000)) + geom_violin(alpha=0.5,fill="#15918A") +  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=1)) + ylab("Read length (bp)") + theme(text=element_text(size=15)) + xlab("Sequence Brain") + theme(aspect.ratio=0.8)
+#ggsave("plots/p.png", plot = p_tissue, width = 6, height = 6, device = "png")
+  return(p_tissue)
+} 
+
+pbrain <- length_plot(B31_all_FLNC_lengths)
+pmix <- length_plot(K32_all_FLNC_lengths)
+pkidney<- length_plot(BK20_80_3_all_FLNC_lengths)
+
+ggarrange( 
+  annotate_figure(pbrain, top = "Brain"),
+  annotate_figure(pmix, top = "Mix"),
+  annotate_figure(pkidney, top = "Kidney"),
+  nrow = 1
+)
+
+# list_files<-list.files(path=dir, pattern = "*_lengths.txt",full.names = TRUE,recursive = TRUE)
+# df<-lapply(list_files,fread)
+# df<-data.table::rbindlist(df)
+# colnames(df)<-c("length","sample","seq")
+# 
+# ggpubr::ggboxplot(df,x="seq",y="length",outlier.size=0.0001,fill="lightblue") + coord_cartesian(ylim=c(0,6000)) + geom_violin(alpha=0.5,fill="lightblue") +  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) + ylab("FLNC read length (# bases)") + theme(text=element_text(size=15)) + xlab("B31 sequencing") + theme(aspect.ratio=0.8)
+
+```
+
+### Splice Junction Support before
+
+
+```{r Splice Junction Support,  warning=FALSE, error=FALSE, echo=FALSE}
+
+# junction files
+list_files<-list.files(path="C:/Users/edward/Downloads/CONESALAB/TFM/Conteos/n",pattern = "*junctions.txt",full.names = TRUE)
+names<-basename(list_files)
+# # Define la muestra y el tipo de secuenciación  
+Samples <- sub("^(.+?)-round2.+|^(.+?)_.+", "\\1\\2", names)
+Sequencing<-gsub("^.*_(Iso-Seq|MAS-Seq)_.*$", "\\1", names)
+# 
+# # Lee todos los dataframes en una lista de df y asigna el nombre a cada uno
+df<-lapply(list_files,fread)
+names(df)<-names
+# 
+# # Añade columnas con la muestra y tipo de secuenciación a cada df de la lista
+for (x in 1:length(df) ) { df[[x]]$Sample<-Samples[x] }
+for (x in 1:length(df) ) { df[[x]]$Sequencing<-Sequencing[x] }
+
+# Concatena todos los df de la lista en una sola df
+df<-data.table::rbindlist(df)
+colnames(df)<-c("Junction","Annotation","Canonicity","Illumina_support","Sample","Sequencing")
+# Columna de Illumina support (verbose)
+df$Illumina_support <- ifelse(df$Illumina_support=="1","Supported","Unsupported")
+# Establece el orden de los niveles
+df$Annotation <- factor(df$Annotation, levels = c("novel", "known"))
+levels(df$Annotation) <- c("Novel", "Known")
+df$Canonicity <- factor(df$Canonicity, levels = c("non_canonical", "canonical"))
+levels(df$Canonicity) <- c("Non_canonical", "Canonical")
+df$Illumina_support <- factor(df$Illumina_support, levels = c("Unsupported", "Supported"))
+df <- na.omit(df)
+
+# SJ support, se eliminan las muestras que no se encuentran en los datos gtex
+palabras_a_excluir <- c("SIRV", "chr1_M", "chrM")
+df_new <- subset(df, !grepl(paste(palabras_a_excluir, collapse = "|"), df$Junction))
+#df_new <- subset(df, !grepl("SIRV", df$junction))
+
+```
+
+
+#### Illumina and gtex support
+
+```{r Illumina and gtex support, warning=FALSE, error=FALSE, echo=FALSE}
+
+mytheme <- theme_classic(base_family = "Helvetica") +
+  theme(axis.line.x = element_line(color="black", size = 0.4),
+        axis.line.y = element_line(color="black", size = 0.4)) +
+  theme(axis.title.x = element_text(size=12),
+        axis.text.x  = element_text(size=11, angle = 60, vjust = 1, hjust=1),
+        axis.title.y = element_text(size=12),
+        axis.text.y  = element_text(vjust=0.5, size=11) ) +
+  theme(legend.text = element_text(size = 11), legend.title = element_blank(), legend.key.size = unit(0.4, "cm")) + #element_text(size=11)
+  theme(plot.title = element_text(lineheight=.4, size=15, hjust = 0.5)) +
+  theme(plot.margin = unit(c(0.1,0.5,0.1,0.1), "cm"))
+
+datos_recount3 <- read.table("C:/Users/edward/Downloads/CONESALAB/TFM/Conteos/n/m39_recount3_processed.txt", header = TRUE)
+colnames(datos_recount3)<-c("Junction","Coordstart","Coordend")
+recount_df <- merge(df_new, datos_recount3, by.x = "Junction", by.y = "Junction", all.x = TRUE)
+recount_df$Gtex_support <- ifelse(is.na(recount_df$Coordstart), 0, 1)
+recount_df$Gtex_support <- ifelse(recount_df$Gtex_support=="1","Supported","Unsupported")
+recount_df$Gtex_support <- factor(recount_df$Gtex_support, levels = c("Unsupported", "Supported"))
+df_recount3 <- subset(recount_df, !grepl("SIRV", recount_df$Junction))
+df_recount3 <- df_recount3[complete.cases(df_recount3[, c("Annotation", "Canonicity", "Illumina_support")]), ]
+df_recount3 <- as.data.frame(df_recount3)
+df_recount3$Tissue <- NA
+df_recount3$Tissue <- ifelse(substr(df_recount3$Sample, 1, 1) == "B" &
+                               substr(df_recount3$Sample, 2, 2) == "3", "Brain",
+                         ifelse(substr(df_recount3$Sample, 1, 1) == "B" &
+                                  substr(df_recount3$Sample, 2, 2) == "K", "Mix",
+                                ifelse(substr(df_recount3$Sample, 1, 1) == "K" &
+                                         substr(df_recount3$Sample, 2, 2) == "3", "Kidney", NA)))
+df_recount3$Tissue = factor(df_recount3$Tissue, levels=c('Brain','Mix','Kidney'))
+  
+#Graphs
+sup <- df_recount3  %>% group_by(Sample, Sequencing, Tissue) %>% dplyr::count(Illumina_support) %>% mutate(prop=n/sum(n)*100)
+sup <- sup[order(sup$Illumina_support, decreasing = TRUE), ]
+sup1 <- sup %>% 
+  group_by(Sample, Sequencing) %>% 
+  mutate(cum_tot = cumsum(prop))%>% 
+  ggplot(aes(Sample, cum_tot, fill =Sequencing)) +  
+  geom_col(data = . %>% filter( Illumina_support=="Supported"), position = position_dodge(width = 0.9), alpha = 1) +
+  geom_col(data = . %>% filter( Illumina_support=="Unsupported"), position = position_dodge(width = 0.9), alpha = 0.6) +
+  geom_tile(aes(y=NA_integer_, alpha = Illumina_support)) + scale_fill_manual(values=c("#15918A","#F58A53")) +
+  scale_alpha_manual(values = c(0.2, 0.6)) + ylab("Percentaje of distinct junctions") + xlab("") + 
+  labs(title ="Illumina support") +
+  mytheme 
+ggplotly(sup1)
+#ggsave("plots/illumina_plot.svg", plot = sup1, width= 12, height = 7, device = "svg")
+
+sup <- df_recount3  %>% group_by(Sample, Sequencing, Tissue) %>% dplyr::count(Gtex_support) %>% mutate(prop=n/sum(n)*100)
+sup <- sup[order(sup$Gtex_support, decreasing = TRUE), ]
+sup2 <- sup %>% 
+  group_by(Sample, Sequencing) %>% 
+  mutate(cum_tot = cumsum(prop))%>% 
+  ggplot(aes(Sample, cum_tot, fill =Sequencing)) +  
+  geom_col(data = . %>% filter( Gtex_support=="Supported"), position = position_dodge(width = 0.9), alpha = 1) +
+  geom_col(data = . %>% filter( Gtex_support=="Unsupported"), position = position_dodge(width = 0.9), alpha = 0.6) +
+  geom_tile(aes(y=NA_integer_, alpha = Gtex_support)) + scale_fill_manual(values=c("#15918A","#F58A53")) +
+  scale_alpha_manual(values = c(0.2, 0.6)) + ylab("Percentaje of distinct junctions") + xlab("") + 
+  labs(title ="GTex support") +
+  mytheme #+
+  #theme(panel.background = element_rect(fill = alpha("#15918A", 0.1)))
+ggplotly(sup2)
+#ggsave("plots/gtex_plot.svg", plot = sup2, width= 12, height = 7, device = "svg")
+
+# canonicity and annotation
+sup <- df_recount3  %>% group_by(Sample, Sequencing, Tissue) %>% dplyr::count(Annotation) %>% mutate(prop=n/sum(n)*100)
+sup <- sup[order(sup$Annotation, decreasing = TRUE), ]
+sup3 <- sup %>% 
+  group_by(Sample, Sequencing) %>% 
+  mutate(cum_tot = cumsum(prop))%>% 
+  ggplot(aes(Sample, cum_tot, fill =Sequencing)) +  
+  geom_col(data = . %>% filter( Annotation=="Known"), position = position_dodge(width = 0.9), alpha = 1) +
+  geom_col(data = . %>% filter( Annotation=="Novel"), position = position_dodge(width = 0.9), alpha = 0.6) +
+  geom_tile(aes(y=NA_integer_, alpha = Annotation)) + scale_fill_manual(values=c("#15918A","#F58A53")) +
+  scale_alpha_manual(values = c(0.2, 0.6)) + ylab("Percentaje of distinct junctions") + xlab("") + 
+  labs(title ="Annotation") +
+  mytheme  
+ggplotly(sup3)
+#ggsave("plots/annotation_plot.svg", plot = sup3, width= 12, height = 7, device = "svg")
+
+sup <- df_recount3  %>% group_by(Sample, Sequencing, Tissue) %>% dplyr::count(Canonicity) %>% mutate(prop=n/sum(n)*100)
+sup <- sup[order(sup$Canonicity, decreasing = TRUE), ]
+sup4 <- sup %>% 
+  group_by(Sample, Sequencing) %>% 
+  mutate(cum_tot = cumsum(prop))%>% 
+  ggplot(aes(Sample, cum_tot, fill =Sequencing)) + 
+  geom_col(data = . %>% filter( Canonicity=="Canonical"), position = position_dodge(width = 0.9), alpha = 1) + 
+  geom_col(data = . %>% filter( Canonicity=="Non_canonical"), position = position_dodge(width = 0.9), alpha = 0.6) + 
+  geom_tile(aes(y=NA_integer_, alpha = Canonicity)) +
+  scale_fill_manual(values=c("#15918A","#F58A53")) +
+  scale_alpha_manual(values = c(0.2, 0.6)) + ylab("Percentaje of distinct junctions") + xlab("") + 
+  labs(title ="Canonicity") +
+  mytheme + guides(alpha = guide_legend(order = 2))
+ggplotly(sup4)
+#ggsave("plots/canonicity_plot.svg", plot = sup4, width= 12, height = 7, device = "svg")
+
+```
+
+```{r Illumina and gtex support, warning=FALSE, error=FALSE, echo=FALSE}
+library(patchwork)
+library(ggh4x)
+
+
+sup1 / sup2  / sup3 / sup4 + plot_layout(axes = "collect", guides='collect') + plot_annotation(tag_levels = 'A')
+
+(((sup1) / (sup2) + plot_layout(axes='collect', guides='collect', axis_titles='collect', ncol = 2)) / ((sup3) / (sup4) + plot_layout(axes='collect', guides='collect', axis_titles='collect', ncol = 2)) + plot_layout(axes='collect_x') + plot_annotation(tag_levels = 'A'))
+
+(sup1  + facet_wrap(~ Sequencing)) + (sup2  + facet_wrap(~ Sequencing)) + (sup3 + facet_wrap(~ Sequencing)) + (sup4  + facet_wrap(~ Sequencing)) + plot_layout(axes='collect', guides='collect', axis_titles='collect', ncol = 2) + plot_annotation(tag_levels = 'A') &  theme(legend.position='bottom')
+
+
+p1 <- sup1 + guides(fill = "none") + facet_nested(~ Tissue + Sequencing, 
+                                                  nest_line = element_line(linetype = 1),
+                          scales = "free") + theme(strip.background = element_blank())
+p2 <- sup2 + guides(fill = "none") + facet_nested(~ Tissue + Sequencing, 
+                                                  nest_line = element_line(linetype = 1),
+                            scales = "free") + theme(strip.background = element_blank()) 
+p3 <- sup3 + guides(fill = "none") + facet_nested(~ Tissue + Sequencing, 
+                                                  nest_line = element_line(linetype = 1),
+                            scales = "free") + theme(strip.background = element_blank())
+p4 <- sup4 + guides(fill = "none") + facet_nested(~ Tissue + Sequencing, 
+                                                  nest_line = element_line(linetype = 1),
+                          scales = "free") + theme(strip.background = element_blank())
+
+soporte <- p1 / p2 / p3 / p4 + plot_layout(axes='collect_x', axis_titles='collect', ncol = 1)  + plot_annotation(tag_levels = 'A')
+print(soporte)
+
+#ggsave("plots/support_all.svg", plot = soporte, width= 6, height = 7.5, device = "svg")
+ggsave("plots/support_all.png", plot = soporte, width= 6, height = 7.5, device = "png")
+
+```
+
+
+#### Lengths UJC
+
+```{r, Lengths UJC, warning=FALSE, error=FALSE, echo=FALSE}
+dir <- "C:/Users/edward/Downloads/CONESALAB/TFM/Rdata/"
+load(paste0(dir, "Isoseq_ujc_class.Rdata"))
+load(paste0(dir, "Masseq_ujc_class.Rdata")) 
+
+dimensiones <- lapply(data_class_Iso_Seq, dim)
+dim_df <- data.frame(No.UJC = sapply(dimensiones, function(x) x[1]))
+print(dim_df)
+dimensiones <- lapply(data_class_Mas_Seq_1, dim)
+dim_df <- data.frame(No.UJC = sapply(dimensiones, function(x) x[1]))
+print(dim_df)
+dimensiones <- lapply(data_class_Mas_Seq_2, dim)
+dim_df <- data.frame(No.UJC = sapply(dimensiones, function(x) x[1]))
+print(dim_df)
+
+
+df_ordered <- data_class_Iso_Seq$B31[order(-data_class_Iso_Seq$B31$length), ] 
+result <- head(df_ordered, 4) 
+print(result)
+#max(data_class_Iso_Seq$B31$length)
+df_ordered <- data_class_Mas_Seq_2$B31[order(-data_class_Mas_Seq_2$B31$length), ] 
+result <- head(df_ordered, 4) 
+print(result)
+
+x <- data_class_Iso_Seq$B31
+x$Seq <- "B31"
+ggpubr::ggboxplot(x,x="Seq",y="length",outlier.size=0.0001,fill="lightblue") + coord_cartesian(ylim=c(0,6000)) + geom_violin(alpha=0.5,fill="lightblue") +  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) + ylab("FLNC read length (# bases)") + theme(text=element_text(size=15)) + xlab("B31 sequencing") + theme(aspect.ratio=0.8)
+
+
+```
+
+
+#### Model FLNC quantification
+
+```{r,  warning=FALSE, error=FALSE, echo=FALSE}
+
+#sample_labels_iso <- c("B31", "B32", "B33", "BK20801", "BK20802","BK20803", "K31", "K32", "K33")
+
+generar_resumen <- function(df_list, texto) {
+  resumen_list <- lapply(seq_along(df_list), function(i) {
+    df <- df_list[[i]]  # Obtener el dataframe actual
+    
+    rows_to_remove <- apply(df, 1, function(row) any(grepl("SIRV", row))) 
+    df <- df[!rows_to_remove, ]
+    
+    df2 <- aggregate(FL ~ structural_category, data=df, sum)
+    df2 <- as.data.frame(df2)  
+    colnames(df2) <- c("Category", "Counts") 
+    df2$Sample <- names(df_list)[i]  
+    df2$Sample <- gsub("_.*", "", df2$Sample)
+    df2$Seq <- texto
+    return(df2)
+  })
+  return(resumen_list)
+}
+
+result_iso <- generar_resumen(data_class_Iso_Seq, texto= "Iso_Seq")
+df_iso <- do.call(rbind, result_iso)
+
+result_mas <- generar_resumen(data_class_Iso_Seq, texto = "Mas_Seq")
+df_mas <- do.call(rbind, result_mas)
+
+datos <- df_iso #rbind(df_iso, df_mas) 
+print(datos)
+
+datosn <- data.frame(
+  count = datos$Counts,
+  sample = datos$Sample) 
+datos_stack <- datosn %>%
+  group_by(sample) %>%
+  mutate(porcentaje = (count / sum(count)) * 100) 
+datos_stack$categoria<-datos$Category
+#datos_stack$sample <-gsub("_classification_head.txt", "", datos_stack$sample)
+xaxislevelsF1 <- c("full-splice_match","incomplete-splice_match","novel_in_catalog","novel_not_in_catalog", "genic","antisense","fusion","intergenic") #,"genic_intron");
+xaxislabelsF1 <- c("FSM", "ISM", "NIC", "NNC", "Genic\nGenomic",  "Antisense", "Fusion","Intergenic")#, "Genic\nIntron")
+
+
+datos_stack$categoria = factor(datos_stack$categoria,
+                               labels = xaxislabelsF1,
+                               levels = xaxislevelsF1,
+                               ordered=TRUE)
+datos_stack
+p1 <- ggplot(datos_stack, aes(x = sample, y = porcentaje, fill = categoria, label = paste0(round(porcentaje, 0), "%"))) +
+  geom_bar(stat="identity", color="black", size=0.3, width=0.7) + 
+  scale_x_discrete(drop=FALSE) +
+  xlab("") +
+  mytheme +
+  geom_text(size = 3, position = position_stack(vjust = 0.5)) + 
+  ylab("Transcripts, %") +
+  #mytheme +
+  theme(axis.text.x = element_text(angle = 45)) +
+  scale_fill_manual(values = cat.palette, guide='none') +
+  ggtitle("Categories ISO-seq\n\n" ) +
+  theme(axis.title.x=element_blank()) +  
+  theme(axis.text.x  = element_text(margin=ggplot2::margin(17,0,0,0), size=12)) +
+  scale_y_continuous(expand=expansion(mult = c(0,0.1))) +
+  theme(legend.justification=c(1,1), legend.position=c(1,1))
+ggplotly(p1)
+
+```
+
+
+
+### Replicates Mas-seq
+
+```{r Replicates Mas-seq,  warning=FALSE, error=FALSE, echo=FALSE}
+
+# Venn Diagrams
+
+#MAS-SEQ
+# Young brains
+x <- list(B31=as.vector(data_class_Mas_Seq_2$B31$UJC),B32=as.vector(data_class_Mas_Seq_2$B32$UJC),B33=as.vector(data_class_Mas_Seq_2$B33$UJC))
+a <- plot(euler(x), quantities = TRUE, lty = 0, labels = list(font = 4), fills = colorConesa(n = 3)) # save PDF (landscape) 4x4 inches
+ggsave("plots/Intersection_brain.svg", plot = a, device = "svg")
+plot(a)
+# Young kidneys
+
+x1 <- list(K31=as.vector(data_class_Mas_Seq_2$K31$UJC),K32=as.vector(data_class_Mas_Seq_2$K32$UJC),K33=as.vector(data_class_Mas_Seq_2$K33$UJC))
+a1 <- plot(euler(x1), quantities = TRUE, lty = 0, labels = list(font = 4), fills = colorConesa(n = 3)) # save PDF (landscape) 4x4 inches
+ggsave("plots/Intersection_kidney.svg", plot = a1, device = "svg")
+plot(a1)
+
+# Kidney - brain Mixed
+
+x2 <- list(BK20801=as.vector(data_class_Mas_Seq_2$BK20801$UJC),BK20802=as.vector(data_class_Mas_Seq_2$BK20802$UJC),BK20803=as.vector(data_class_Mas_Seq_2$BK20803$UJC))
+a2 <- plot(euler(x2), quantities = TRUE, lty = 0, labels = list(font = 4), fills = colorConesa(n = 3)) # save PDF (landscape) 4x4 inches
+ggsave("plots/Intersection_mixed.svg", plot = a2, device = "svg")
+plot(a2)
+
+#ISO-SEQ
+# Young brains
+x3 <- list(B31=as.vector(data_class_Iso_Seq$B31$UJC),B32=as.vector(data_class_Iso_Seq$B32$UJC),B33=as.vector(data_class_Iso_Seq$B33$UJC))
+a3 <- plot(euler(x3), quantities = TRUE, lty = 0, labels = list(font = 4), fills = colorConesa(n = 3)) # save PDF (landscape) 4x4 inches
+ggsave("plots/Intersection_iso_brain.svg", plot = a3, device = "svg")
+plot(a3)
+
+# Young kidneys
+x4 <- list(K31=as.vector(data_class_Iso_Seq$K31$UJC),K32=as.vector(data_class_Iso_Seq$K32$UJC),K33=as.vector(data_class_Iso_Seq$K33$UJC))
+a4 <- plot(euler(x4), quantities = TRUE, lty = 0, labels = list(font = 4), fills = colorConesa(n = 3)) # save PDF (landscape) 4x4 inches
+ggsave("plots/Intersection_iso_kidney.svg", plot = a4, device = "svg")
+plot(a4)
+
+# Kidney - brain Mixed
+x5 <- list(BK20801=as.vector(data_class_Iso_Seq$BK20801$UJC),BK20802=as.vector(data_class_Iso_Seq$BK20802$UJC),BK20803=as.vector(data_class_Iso_Seq$BK20803$UJC))
+a5 <- plot(euler(x5), quantities = TRUE, lty = 0, labels = list(font = 4), fills = colorConesa(n = 3)) # save PDF (landscape) 4x4 inches
+ggsave("plots/Intersection_iso_mixed.svg", plot = a5, device = "svg")
+plot(a5)
+
+
+x <- list(B31_mas=as.vector(data_class_Mas_Seq_2$B31$UJC), B32_mas=as.vector(data_class_Mas_Seq_2$B32$UJC), B33_mas=as.vector(data_class_Mas_Seq_2$B33$UJC), B31_iso=as.vector(data_class_Iso_Seq$B31$UJC))#, "B31_mas&B31_iso"=0, "B31_mas&B32_iso"=0, "B31_mas&B33_iso"=0, "B32_mas&B31_iso"=0, "B32_mas&B32_iso"=0, "B32_mas&B33_iso"=0, "B33_mas&B31_iso"=0, "B33_mas&B32_iso"=0, "B33_mas&B33_iso"=0)
+a <- plot(euler(x), quantities = TRUE, lty = 0, labels = list(font = 4), fills = colorConesa(n = 6)) # save PDF (landscape) 
+plot(a)
+
+x <- list(B31_mas=as.vector(data_class_Mas_Seq_2$B31$UJC), B32_mas=as.vector(data_class_Mas_Seq_2$B32$UJC), B33_mas=as.vector(data_class_Mas_Seq_2$B33$UJC), B32_iso=as.vector(data_class_Iso_Seq$B32$UJC))#, B33_iso=as.vector(data_class_Iso$B33$UJC)
+a <- plot(euler(x), quantities = TRUE, lty = 0, labels = list(font = 4), fills = colorConesa(n = 6)) # save PDF (landscape) 
+plot(a)
+
+x <- list(B31_mas=as.vector(data_class_Mas_Seq_2$B31$UJC), B32_mas=as.vector(data_class_Mas_Seq_2$B32$UJC), B33_mas=as.vector(data_class_Mas_Seq_2$B33$UJC), B33_iso=as.vector(data_class_Iso_Seq$B33$UJC))
+a <- plot(euler(x), quantities = TRUE, lty = 0, labels = list(font = 4), fills = colorConesa(n = 6)) # save PDF (landscape) 
+plot(a)
+
+```
+
+
+
+
+```{r,  warning=FALSE, error=FALSE, echo=FALSE}
+
+xaxislabelsF1 <- c("full-splice_match","incomplete-splice_match", "novel_not_in_catalog","novel_in_catalog","antisense" ,"fusion", "genic","intergenic")
+
+create_upset_plot <- function(class_df_list, sample_labels) {
+  listUJC <-do.call(rbind, lapply(class_df_list, function(class_df) class_df[!is.na(class_df$UJC), c("structural_category", "UJC")]))
+   print(listUJC)
+   listUJC <- distinct(listUJC)
+   listUJC <- na.omit(listUJC)
+   # 
+    # Reorder dataframe based on SC preference
+    listUJC$structural_category <- factor(listUJC$structural_category, levels = xaxislabelsF1)
+    listUJC <- listUJC %>%
+    arrange(UJC, structural_category)
+   # 
+   # # Deduplicate the dataframe and keep only the first row for each ID
+    listUJC <- listUJC %>% distinct(UJC, .keep_all = TRUE) %>%
+      ungroup()
+   
+  for (i in 1:length(class_df_list)){
+  sample_id <- names(class_df_list)[[i]]
+  listUJC[, sample_id] <- ifelse(listUJC$UJC %in% class_df_list[[i]]$UJC, 1, 0)
+  }
+    
+  colnames(listUJC) <- c("structural_category", "UJC", sample_labels)
+  upset(listUJC, sets = sample_labels, number.angles = 30, sets.bar.color = "#15918A", nintersects = 20,
+        order.by = "freq", keep.order = TRUE,
+        point.size = 3.5, line.size = 2,
+        mainbar.y.label = "Transcript intersections", sets.x.label = "Total UJCs",
+        text.scale = c(1.5, 1.5, 1.5, 1.5, 1.6, 1.5),
+        main.bar.color = "black", mb.ratio = c(0.6, 0.4),
+        queries = list(
+          list(query = elements, params = list("structural_category", xaxislabelsF1), color = "#6BAED6", active = T, query.name = "full-splice_match"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[2:length(xaxislabelsF1)]), color = "#FC8D59", active = T, query.name = "incomplete-splice_match"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[3:length(xaxislabelsF1)]), color = "#78C679", active = T, query.name = "novel_in_catalog"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[4:length(xaxislabelsF1)]), color = "#EE6A50", active = T, query.name = "novel_not_in_catalog"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[5:length(xaxislabelsF1)]), color = "#969696", active = T, query.name = "genic"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[6:length(xaxislabelsF1)]), color = "#66C2A4", active = T, query.name = "antisense"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[7:length(xaxislabelsF1)]), color = "goldenrod1", active = T, query.name = "fusion"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[8:length(xaxislabelsF1)]), color = "darksalmon", active = T, query.name = "intergenic")
+        ))
+}
+
+process_sample_labels <- function(data) {
+  processed_labels <- lapply(names(data), function(secuencia) { 
+    label <- gsub("__.*UJC_nodup_count", "", secuencia) 
+    label <- gsub("__.*_UJC_SIRV_nodup_count", "_SIRV", label)
+    return(label)
+  })
+  return(processed_labels)
+} 
+
+sample_labels_iso <- c("B31", "B32", "B33", "BK20801", "BK20802","BK20803", "K31", "K32", "K33")
+svg("upset_plot_iso.svg", width = 8, height = 6)
+create_upset_plot(data_class_Iso_Seq, sample_labels_iso)
+grid.text("Iso-Seq",x = 0.65, y=0.95, gp=gpar(fontsize=20))
+dev.off() 
+
+sample_labels_mas2 <- c("B31", "B32", "B33", "BK20801", "BK20802","BK20803", "K31", "K32", "K33")
+svg("upset_plot_mas2.svg", width = 8, height = 6)
+create_upset_plot(data_class_Mas_Seq_2, sample_labels_mas2)
+grid.text("Mas-Seq R2",x = 0.65, y=0.95, gp=gpar(fontsize=20))
+dev.off()
+
+```
+
+# All Intersection by tissue
+
+```{r,  warning=FALSE, error=FALSE, echo=FALSE}
+
+xaxislabelsF1 <- c("full-splice_match","incomplete-splice_match", "novel_not_in_catalog","novel_in_catalog","antisense" ,"fusion", "genic","intergenic")
+
+create_upset_plot <- function(class_df_list, sample_labels) {
+  listUJC <-do.call(rbind, lapply(class_df_list, function(class_df) class_df[!is.na(class_df$UJC), c("structural_category", "UJC")]))
+   #print(listUJC)
+   #listUJC <- distinct(listUJC)
+   listUJC <- na.omit(listUJC)
+   # 
+    # Reorder dataframe based on SC preference
+    listUJC$structural_category <- factor(listUJC$structural_category, levels = xaxislabelsF1)
+    listUJC <- listUJC %>%
+    arrange(UJC, structural_category)
+   # 
+   # # Deduplicate the dataframe and keep only the first row for each ID
+    #listUJC <- listUJC %>% distinct(UJC, .keep_all = TRUE) %>%
+    #  ungroup()
+   
+  for (i in 1:length(class_df_list)){
+  sample_id <- names(class_df_list)[[i]]
+  listUJC[, sample_id] <- ifelse(listUJC$UJC %in% class_df_list[[i]]$UJC, 1, 0)
+  }
+    
+  colnames(listUJC) <- c("structural_category", "UJC", sample_labels)
+  upset(listUJC, sets = sample_labels, number.angles = 30, sets.bar.color = "#15918A", nintersects = 20,
+        order.by = "freq", keep.order = TRUE,
+        point.size = 3.5, line.size = 2,
+        mainbar.y.label = "Reads intersections", sets.x.label = "Total UJCs",
+        text.scale = c(1.5, 1.5, 1.5, 1.5, 1.6, 1.5),
+        main.bar.color = "black", mb.ratio = c(0.6, 0.4),
+        queries = list(
+          list(query = elements, params = list("structural_category", xaxislabelsF1), color = "#6BAED6", active = T, query.name = "full-splice_match"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[2:length(xaxislabelsF1)]), color = "#FC8D59", active = T, query.name = "incomplete-splice_match"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[3:length(xaxislabelsF1)]), color = "#78C679", active = T, query.name = "novel_in_catalog"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[4:length(xaxislabelsF1)]), color = "#EE6A50", active = T, query.name = "novel_not_in_catalog"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[5:length(xaxislabelsF1)]), color = "#969696", active = T, query.name = "genic"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[6:length(xaxislabelsF1)]), color = "#66C2A4", active = T, query.name = "antisense"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[7:length(xaxislabelsF1)]), color = "goldenrod1", active = T, query.name = "fusion"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[8:length(xaxislabelsF1)]), color = "darksalmon", active = T, query.name = "intergenic")
+        ))
+}
+
+sample_labels_iso <- c("B31", "B32", "B33", "BK20801", "BK20802","BK20803", "K31", "K32", "K33")
+#svg("upset_plot_iso.svg", width = 8, height = 6)
+#create_upset_plot(data_class_Iso_Seq, sample_labels_iso)
+#grid.text("Iso-Seq",x = 0.65, y=0.95, gp=gpar(fontsize=20))
+#dev.off()
+#create_upset_plot(data_class_Iso_Seq, sample_labels_iso)
+
+
+duplicar_filas <- function(df) {
+  df %>%
+    select(UJC, structural_category, FL) %>%
+    uncount(FL)
+}
+
+#lista_df_duplicada <- lapply(data_class_Iso_Seq, duplicar_filas)
+
+# svg("upset_plot_iso_reads.svg", width = 8, height = 6)
+# create_upset_plot(lista_df_duplicada, sample_labels_iso)
+# grid.text("Iso-Seq Reads",x = 0.65, y=0.95, gp=gpar(fontsize=20))
+# dev.off()
+
+lista_df_duplicada_mas <- lapply(data_class_Mas_Seq_2[1:3], duplicar_filas)
+sample_labels_iso <- c("B31", "B32", "B33")
+svg("upset_plot_mas_reads_B31.svg", width = 8, height = 6)
+create_upset_plot(lista_df_duplicada_mas, sample_labels_iso)
+grid.text("Mas-Seq Reads",x = 0.65, y=0.95, gp=gpar(fontsize=20))
+dev.off()
+
+lista_df_duplicada_mas <- lapply(data_class_Mas_Seq_2[4:6], duplicar_filas)
+sample_labels_iso <- c("BK20801", "BK20802","BK20803")
+svg("upset_plot_mas_reads_B31.svg", width = 8, height = 6)
+create_upset_plot(lista_df_duplicada_mas, sample_labels_iso)
+grid.text("Mas-Seq Reads",x = 0.65, y=0.95, gp=gpar(fontsize=20))
+dev.off()
+
+lista_df_duplicada_mas <- lapply(data_class_Mas_Seq_2[7:9], duplicar_filas)
+sample_labels_iso <- c("K31", "K32", "K33")
+svg("upset_plot_mas_reads_B31.svg", width = 8, height = 6)
+create_upset_plot(lista_df_duplicada_mas, sample_labels_iso)
+grid.text("Mas-Seq Reads",x = 0.65, y=0.95, gp=gpar(fontsize=20))
+dev.off()
+
+```
+
+
+```{r, eval=FALSE}
+
+# sample_labels_iso <- c("B31_SIRV", "B32_SIRV", "B33_SIRV")
+# svg("upset_plot_sirv.svg", width = 8, height = 6)
+# create_upset_plot(data_class_Iso_sirv, sample_labels_iso)
+# grid.text("Iso-Seq SIRVS",x = 0.65, y=0.95, gp=gpar(fontsize=20))
+# dev.off()
+
+# sample_labels_mas2 <- c("B31_SIRV", "B32_SIRV", "B33_SIRV", "BK20801_SIRV", "BK20802_SIRV","BK20803_SIRV", "K31_SIRV", "K32_SIRV", "K33_SIRV")
+# svg("upset_plot2_sirv.svg", width = 8, height = 6)
+# create_upset_plot(data_class_Mas_2_sirv, sample_labels_mas2)
+# grid.text("Mas-Seq R2 SIRVS",x = 0.65, y=0.95, gp=gpar(fontsize=20))
+# dev.off()
+
+```
+
+
+```{r,  warning=FALSE, error=FALSE, echo=FALSE}
+
+correlation_plot <- function(table_MAS_Seq, table_Iso_Seq, c) {
+  
+  table_MAS_Seq <-table_MAS_Seq[c("UJC","FL")]  
+  table_Iso_Seq <-table_Iso_Seq[c("UJC","FL")]
+  
+  tabla_biocounts <- merge(table_MAS_Seq, table_Iso_Seq, by="UJC", x.all = FALSE, y.all = FALSE)
+  colnames(tabla_biocounts) <- c("UJC", "MAS", "ISO")
+  
+  suma_totalx <- sum(tabla_biocounts$MAS) 
+  tabla_biocounts$CPM.MAS <- (tabla_biocounts$MAS / suma_totalx) * 1e6
+  suma_totaly <- sum(tabla_biocounts$ISO) 
+  tabla_biocounts$CPM.ISO <- (tabla_biocounts$ISO / suma_totaly) * 1e6
+  # Calcular el log fold change (logFC)
+  tabla_biocounts$logCPM.MAS <- log10(tabla_biocounts$CPM.MAS)
+  tabla_biocounts$logCPM.ISO <- log10(tabla_biocounts$CPM.ISO)
+  print(dim(tabla_biocounts))
+  # Grafico de logaritmos de conteos por millon
+  p_cor <- ggscatter(tabla_biocounts, x = "logCPM.MAS", y = "logCPM.ISO",
+                     add = "reg.line", 
+                     color = "#15918A",#geom_point(colour = "#15918A", alpha=0.5),
+                     alpha = 0.5,
+                     #conf.int = TRUE,
+                     add.params = list(color = "#F58A53",
+                              fill = "lightgray"),
+                     #cor.coef = TRUE, 
+                     #cor.method = "spearman",
+                     title = c,
+                     xlab = "MAS-seq UJC expression (log(CPM))", 
+                     ylab = "Iso-seq UJC expression (log(CPM))") + 
+    stat_cor(method = "pearson", color= "#F58A53", label.x = 3, label.y = 1)
+  p_cor <- p_cor + geom_point(color =  "transparent") +
+    xlim(c(0,4.5)) + ylim(c(0,4.5)) +
+    geom_abline(intercept = 0, slope = 1)
+  p_cor
+  #res3 <-cor.test(tabla_biocounts$logCPM.MAS, tabla_biocounts$logCPM.ISO,  
+  #                method = "spearman")
+  #print(res3)
+}
+
+# plots
+a<-correlation_plot(data_class_Mas_Seq_2$B31, data_class_Iso_Seq$B31, "B31")
+b<-correlation_plot(data_class_Mas_Seq_2$B32, data_class_Iso_Seq$B32, "B32")
+c<-correlation_plot(data_class_Mas_Seq_2$B33, data_class_Iso_Seq$B33, "B33")
+g<-correlation_plot(data_class_Mas_Seq_2$K31, data_class_Iso_Seq$K31, "K31")
+h<-correlation_plot(data_class_Mas_Seq_2$K32, data_class_Iso_Seq$K32, "K32")
+i<-correlation_plot(data_class_Mas_Seq_2$K33, data_class_Iso_Seq$K33, "K33")
+d<-correlation_plot(data_class_Mas_Seq_2$BK20801, data_class_Iso_Seq$BK20801, "BK20801")
+e<-correlation_plot(data_class_Mas_Seq_2$BK20802, data_class_Iso_Seq$BK20802, "BK20802")
+f<-correlation_plot(data_class_Mas_Seq_2$BK20803, data_class_Iso_Seq$BK20803, "BK20803")
+p_cor_all <-ggarrange(a,b,c,d,e,f,g,h,i, ncol=3, nrow = 3, common.legend = TRUE)
+ggsave("ALL_correlation_len.svg", plot = p_cor_all, device = "svg")
+
+```
+
+```{r}
+correlation_plot(lista_filtered$B31, lista_filtered_m$B31, "B31")
+```
+
+
+
+
+# Upsets -box plots
+
+### Iso-seq SMRTcell performance
+
+
+```{r, warning=FALSE, error=FALSE, echo=FALSE}
+
+dir <- "C:/Users/edward/Downloads/CONESALAB/TFM/Rdata/"
+
+xaxislabelsF1 <- c("full-splice_match","incomplete-splice_match", "novel_not_in_catalog","novel_in_catalog","antisense" ,"fusion", "genic","intergenic")
+
+create_upset_plot <- function(class_df_list, sample_labels) {
+  listUJC <-do.call(rbind, lapply(class_df_list, function(class_df) class_df[!is.na(class_df$UJC), c("structural_category", "UJC")]))
+   print(listUJC)
+   listUJC <- distinct(listUJC)
+   listUJC <- na.omit(listUJC)
+   # 
+    # Reorder dataframe based on SC preference
+    listUJC$structural_category <- factor(listUJC$structural_category, levels = xaxislabelsF1)
+    listUJC <- listUJC %>%
+    arrange(UJC, structural_category)
+   # 
+   # # Deduplicate the dataframe and keep only the first row for each ID
+    listUJC <- listUJC %>% distinct(UJC, .keep_all = TRUE) %>%
+      ungroup()
+   
+  for (i in 1:length(class_df_list)){
+  sample_id <- names(class_df_list)[[i]]
+  listUJC[, sample_id] <- ifelse(listUJC$UJC %in% class_df_list[[i]]$UJC, 1, 0)
+  
+  }
+    
+  colnames(listUJC) <- c("structural_category", "UJC", sample_labels)
+  head(listUJC)
+  upset(listUJC, sets = sample_labels, number.angles = 30, sets.bar.color = "#15918A", nintersects = 20,
+        order.by = "freq", keep.order = TRUE,
+        #point.size = 3.5, line.size = 2,
+        show.numbers =FALSE,
+        set_size.scale_max = 165000,
+              #mainbar.y.max = 80000,
+        mainbar.y.label = "Transcript Counts", sets.x.label = "Sample UJCs Size",
+        text.scale = c(1, 1, 1, 1, 1, 1), #c(1.5, 1.5, 1.5, 1.5, 1.6, 1.5),
+        main.bar.color = "black", #mb.ratio = c(0.6, 0.4),
+        queries = list(
+          list(query = elements, params = list("structural_category", xaxislabelsF1), color = "#6BAED6", active = T, query.name = "full-splice_match"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[2:length(xaxislabelsF1)]), color = "#FC8D59", active = T, query.name = "incomplete-splice_match"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[3:length(xaxislabelsF1)]), color = "#78C679", active = T, query.name = "novel_in_catalog"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[4:length(xaxislabelsF1)]), color = "#EE6A50", active = T, query.name = "novel_not_in_catalog"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[5:length(xaxislabelsF1)]), color = "#969696", active = T, query.name = "genic"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[6:length(xaxislabelsF1)]), color = "#66C2A4", active = T, query.name = "antisense"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[7:length(xaxislabelsF1)]), color = "goldenrod1", active = T, query.name = "fusion"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[8:length(xaxislabelsF1)]), color = "darksalmon", active = T, query.name = "intergenic")
+        ))
+}
+
+process_sample_labels <- function(data) {
+  processed_labels <- lapply(names(data), function(secuencia) {
+    label <- gsub("__.*UJC_nodup_count", "", secuencia)
+    label <- gsub("__.*_UJC_SIRV_nodup_count", "_SIRV", label)
+    return(label)
+  })
+  return(processed_labels)
+}
+
+#ISO
+sample_labels_iso <- c("B31", "B32", "B33", "BK20801", "BK20802","BK20803", "K31", "K32", "K33")
+#svg("upset_plot.svg", width = 8, height = 6)
+#create_upset_plot(data_class_Iso[1:9], sample_labels_iso)
+create_upset_plot(data_class_Iso_Seq, sample_labels_iso)
+#grid.text("Iso-Seq",x = 0.65, y=0.95, gp=gpar(fontsize=20))
+#dev.off()
+
+#MAS
+sample_labels_MAS <- c("B31", "B32", "B33", "BK20801", "BK20802","BK20803", "K31", "K32", "K33")
+create_upset_plot(data_class_Mas_Seq_2, sample_labels_MAS)
+
+```
+
+
+```{r, eval=FALSE}
+#ISO
+sample_labels_iso <- c("B31", "B32", "B33", "BK20801", "BK20802","BK20803", "K31", "K32", "K33")
+svg("upset_plot_iso__.svg", width = 8, height = 6) 
+create_upset_plot(data_class_Iso_Seq, sample_labels_iso)
+grid.text("Iso-Seq",x = 0.65, y=0.95, gp=gpar(fontsize=20))
+dev.off()
+
+#MAS
+sample_labels_MAS <- c("B31", "B32", "B33", "BK20801", "BK20802","BK20803", "K31", "K32", "K33")
+svg("upset_plot_mas__2.svg", width = 8, height = 6) 
+create_upset_plot(data_class_Mas_Seq_2, sample_labels_MAS) 
+grid.text("Iso-Seq",x = 0.65, y=0.95, gp=gpar(fontsize=20))
+dev.off()
+
+```
+
+
+
+
+
+
+### CAGE Peak y PolyA sites
+
+
+```{r,  warning=FALSE, error=FALSE, echo=FALSE}
+library(ggplot2)
+library(RColorConesa)
+datos = read.table("files/within_CAGE_peak.txt", header=F, as.is=T, sep="")
+colnames(datos) <- c("Seq","Count","within_CAGE_peak")
+p1 <- ggplot(datos, aes(x = Seq, y = Count, fill = within_CAGE_peak)) +
+  geom_bar(stat = "identity", position = "fill") +
+  labs(title = "B31 within CAGE peak", x = "Sequence Technology", y = "Counts %") +
+  scale_fill_manual(values = c("FALSE" = '#e37744', "TRUE" = '#379637')) + mytheme
+p1
+#ggsave("within_CAGE_peak.svg", plot = p1, device = "svg")
+
+datos2 = read.table("files/within_polyA_site.txt", header=F, as.is=T, sep="")
+colnames(datos2) <- c("Seq","Count","within_polyA_site")
+p1 <- ggplot(datos2, aes(x = Seq, y = Count, fill = within_polyA_site)) +
+  geom_bar(stat = "identity", position = "fill") +
+  labs(title = "B31 within PolyA site", x = "Sequence Technology", y = "Counts %") +scale_fill_manual(values = colorConesa(n = 2)) + mytheme
+p1
+#ggsave("within_PolyA.svg", plot = p1, device = "svg")
+
+datos3 = read.table("files/dist_to_polyA_site.txt", header=F, as.is=T, sep="")
+colnames(datos3) <- c("Seq","Count","dist_to_polyA_site")
+datos3$dist_to_polyA_site <- as.numeric(datos3$dist_to_polyA_site)
+datos3$CPM <- ifelse(datos3$Seq == "Iso_Seq", datos3$Count / sum(datos3$Count[datos3$Seq == "Iso_Seq"]) * 1e6,
+                     datos3$Count / sum(datos3$Count[datos3$Seq == "Mas_Seq"]) * 1e6)
+
+p1 <- ggplot(datos3, aes(x = dist_to_polyA_site, y = CPM, color = Seq)) + 
+  labs(title = "B31 dist to PolyA site", x = "Distances", y = "Counts per million") +
+  #ylim(0, max(datos3$CPM)) +
+  geom_line() +scale_fill_manual(values = colorConesa(n = 22))+ mytheme
+p1
+#ggsave("dist_to_polyA_site.svg", plot = p1, device = "svg")
+
+datos4 = read.table("files/dist_to_CAGE_peak.txt", header=F, as.is=T, sep="")
+colnames(datos4) <- c("Seq","Count","dist_to_CAGE_peak")
+datos4$dist_to_CAGE_peak <- as.numeric(datos4$dist_to_CAGE_peak)
+datos4$CPM <- ifelse(datos4$Seq == "Iso_Seq", datos4$Count / sum(datos4$Count[datos4$Seq == "Iso_Seq"]) * 1e6,
+                     datos4$Count / sum(datos4$Count[datos4$Seq == "Mas_Seq"]) * 1e6)
+
+ggplot(datos4, aes(x = dist_to_CAGE_peak, y = CPM, color = Seq)) + 
+  labs(title = "B31 dist to CAGE peak", x = "Distances", y = "Counts per million") +
+  #ylim(0, max(datos4$CPM[0:10000])) +
+  geom_line() +scale_fill_manual(values = colorConesa(n = 2))+ mytheme
+
+p1 <- ggplot(datos4, aes(x = dist_to_CAGE_peak, y = CPM, color = Seq)) + 
+  labs(title = "B31 dist to CAGE peak", x = "Distances", y = "Counts per million") +
+  #ylim(0, max(datos4$CPM[0:10000])) +
+  xlim(-400,400) +
+  ylim(0, 40000) +
+  geom_line() +scale_fill_manual(values = colorConesa(n = 2))+ mytheme
+p1
+#ggsave("dist_to_CAGE_peak.svg", plot = p1, device = "svg")
+
+datos5 = read.table("files/polyA_motif.txt", header=F, as.is=T, sep="")
+colnames(datos5) <- c("Seq","Count","polyA_motif")
+datos5$Count <- as.numeric(datos5$Count)
+datos5$CPM <- ifelse(datos5$Seq == "Iso_Seq", datos5$Count / sum(datos5$Count[datos5$Seq == "Iso_Seq"]) * 1e6,
+                     datos5$Count / sum(datos5$Count[datos5$Seq == "Mas_Seq"]) * 1e6)
+p1 <-ggplot(datos5, aes(x = CPM, y = polyA_motif, color = Seq)) + 
+  geom_point() +
+  labs(title = "B31 polyA motif", x = "Counts per million", y = "Motif") +
+  #ylim(0, 1000000) +
+  geom_line() +
+  scale_fill_manual(values = colorConesa(n = 22))+
+  mytheme #  theme(axis.text.x = element_text(angle = 60)) 
+p1
+#ggsave("polyA_motif.svg", plot = p1, width= 6, height = 10, device = "svg")
+
+datos6 = read.table("files/polyA_motif_found.txt", header=F, as.is=T, sep="")
+colnames(datos6) <- c("Seq","Count","polyA_motif_found")
+
+p1 <- ggplot(datos6, aes(x = Seq, y = Count, fill = polyA_motif_found)) + 
+  geom_bar(stat = "identity", position = "fill") +
+  labs(title = "B31 PolyA motif found", x = "Sequence Technology", y = "Counts %") + #
+  #ylim(0, 1000000) 
+  scale_fill_manual(values = colorConesa(n = 3)) + mytheme
+p1
+#ggsave("polyA_motif_found.svg", plot = p1, device = "svg")
+
+datos7 = read.table("files/polyA_dist.txt", header=F, as.is=T, sep="")
+colnames(datos7) <- c("Seq","Count","polyA_dist")
+datos7$Count <- as.numeric(datos7$Count)
+datos7$polyA_dist <- as.character(datos7$polyA_dist)
+#datos7 <- na.omit(datos7)
+datos7$CPM <- ifelse(datos7$Seq == "Iso_Seq", datos7$Count / sum(datos7$Count[datos7$Seq == "Iso_Seq"]) * 1e6,
+                     datos7$Count / sum(datos7$Count[datos7$Seq == "Mas_Seq"]) * 1e6)
+ggplot(datos7, aes(x = as.numeric(polyA_dist), y = CPM, color = Seq)) + 
+  #labs(title = "B31 polyA motif", x = "Counts per million", y = "Motif") +
+  geom_line() +
+  labs(title = "B31 PolyA motif dist") +
+  scale_fill_manual(values = colorConesa(n = 2))+
+  ylim(0, 90000) +
+  mytheme #  theme(axis.text.x = element_text(angle = 60)) 
+
+```
+
+
+```{r,  warning=FALSE, error=FALSE, echo=FALSE}
+datos <- aggregate(FL ~ within_CAGE_peak, data = data_class_Iso_Seq$B31, sum)
+datos$Seq = c(rep("Iso_Seq",length(datos[1])))
+datosm <- aggregate(FL ~ within_CAGE_peak, data = data_class_Mas_Seq_2$B31, sum) 
+datosm$Seq = c(rep("Mas_Seq",length(datosm[1])))
+datos <- rbind(datos, datosm)
+colnames(datos) <- c("within_CAGE_peak","Count","Seq")
+
+ggplot(datos, aes(x = Seq, y = Count, fill = within_CAGE_peak)) +
+  geom_bar(stat = "identity", position = "fill") +
+  labs(title = "B31 within CAGE peak", x = "Sequence Technology", y = "Counts %") +
+  scale_fill_manual(values = c("FALSE" = '#e37744', "TRUE" = '#379637')) + mytheme
+
+datos2 = aggregate(FL ~ within_polyA_site, data = data_class_Iso_Seq$B31, sum)
+datos2$Seq = c(rep("Iso_Seq",length(datos2[1])))
+datosm <- aggregate(FL ~ within_polyA_site, data = data_class_Mas_Seq_2$B31, sum)
+datosm$Seq = c(rep("Mas_Seq",length(datosm[1])))
+datos2 <- rbind(datos2, datosm)
+colnames(datos2) <- c("within_PolyA","Count","Seq")
+
+ggplot(datos2, aes(x = Seq, y = Count, fill = within_PolyA)) +
+  geom_bar(stat = "identity", position = "fill") +
+  labs(title = "B31 within PolyA site", x = "Sequence Technology", y = "Counts %") +scale_fill_manual(values = colorConesa(n = 2))+ mytheme
+
+datos3 <- aggregate(FL ~ dist_to_polyA_site, data = data_class_Iso_Seq$B31, sum)
+datos3$Seq = c(rep("Iso_Seq",length(datos3[1])))
+datosm <- aggregate(FL ~ dist_to_polyA_site, data = data_class_Mas_Seq_2$B31, sum)
+datosm$Seq = c(rep("Mas_Seq",length(datosm[1])))
+datos3 <- rbind(datos3, datosm)
+colnames(datos3) <- c("dist_to_polyA_site","Count","Seq")
+
+datos3$CPM <- ifelse(datos3$Seq == "Iso_Seq", datos3$Count / sum(datos3$Count[datos3$Seq == "Iso_Seq"]) * 1e6,
+                     datos3$Count / sum(datos3$Count[datos3$Seq == "Mas_Seq"]) * 1e6)
+datos3$dist_to_polyA_site <- as.numeric(datos3$dist_to_polyA_site)
+
+ggplot(datos3, aes(x = dist_to_polyA_site, y = CPM, color = Seq)) + 
+  labs(title = "B31 dist to PolyA site", x = "Distances", y = "Counts per million") +
+  #ylim(0, max(datos3$CPM)) +
+  geom_line() +scale_fill_manual(values = colorConesa(n = 22))+ mytheme
+
+datos4 <- aggregate(FL ~ dist_to_CAGE_peak, data = data_class_Iso_Seq$B31, sum)
+datos4$Seq = c(rep("Iso_Seq",length(datos4[1])))
+datosm <- aggregate(FL ~ dist_to_CAGE_peak, data = data_class_Mas_Seq_2$B31, sum) 
+datosm$Seq = c(rep("Mas_Seq",length(datosm[1])))
+datos4 <- rbind(datos4, datosm)
+colnames(datos4) <- c("dist_to_CAGE_peak","Count","Seq")
+
+datos4$CPM <- ifelse(datos4$Seq == "Iso_Seq", datos4$Count / sum(datos4$Count[datos4$Seq == "Iso_Seq"]) * 1e6,
+                     datos4$Count / sum(datos4$Count[datos4$Seq == "Mas_Seq"]) * 1e6)
+datos4$dist_to_CAGE_peak <- as.numeric(datos4$dist_to_CAGE_peak)
+
+ggplot(datos4, aes(x = dist_to_CAGE_peak, y = CPM, color = Seq)) + 
+  labs(title = "B31 dist to CAGE peak", x = "Distances", y = "Counts per million") +
+  #ylim(0, max(datos4$CPM[0:10000])) +
+  geom_line() + scale_fill_manual(values = colorConesa(n = 2)) + mytheme
+
+ggplot(data = datos4, aes(x = dist_to_CAGE_peak, y = CPM, color = Seq)) + 
+  labs(title = "B31 dist to CAGE peak", x = "Distances", y = "Counts per million") +
+  #ylim(0, max(datos4$CPM[0:10000])) +
+  xlim(-400,400) +
+  geom_line() + scale_fill_manual(values = colorConesa(n = 2)) + mytheme
+
+datos5 <- aggregate(FL ~ polyA_motif, data = data_class_Iso_Seq$B31, sum) 
+datos5$Seq = c(rep("Iso_Seq",length(datos5[1])))
+datosm <- aggregate(FL ~ polyA_motif, data = data_class_Mas_Seq_2$B31, sum) 
+datosm$Seq = c(rep("Mas_Seq",length(datosm[1])))
+datos5 <- rbind(datos5, datosm)
+colnames(datos5) <- c("polyA_motif","Count","Seq")
+
+datos5$CPM <- ifelse(datos5$Seq == "Iso_Seq", datos5$Count / sum(datos5$Count[datos5$Seq == "Iso_Seq"]) * 1e6,
+                     datos5$Count / sum(datos5$Count[datos5$Seq == "Mas_Seq"]) * 1e6)
+
+ggplot(datos5, aes(x = CPM, y = polyA_motif, color = Seq)) + 
+  geom_point() +
+  labs(title = "B31 polyA motif", x = "Counts per million", y = "Motif") +
+  geom_line() +
+  scale_fill_manual(values = colorConesa(n = 22))+
+  mytheme #  theme(axis.text.x = element_text(angle = 60))  
+
+###
+datos6 <- aggregate(FL ~ polyA_motif_found, data = data_class_Iso_Seq$B31, sum)  
+datos6$Seq = c(rep("Iso_Seq",2))
+datosm <- aggregate(FL ~ polyA_motif_found, data = data_class_Mas_Seq_2$B31, sum)  
+datosm$Seq = c(rep("Mas_Seq",2))
+datos6 <- rbind(datos6, datosm)
+colnames(datos6) <- c("polyA_motif_found","Count","Seq")
+
+ggplot(datos6, aes(x = Seq, y = Count, fill = polyA_motif_found)) + 
+  geom_bar(stat = "identity", position = "fill") +
+  labs(title = "B31 PolyA motif found", x = "Sequence Technology", y = "Counts %") + #
+  #ylim(0, 1000000) 
+  scale_fill_manual(values = colorConesa(n = 2))+ mytheme 
+
+datos7 <- aggregate(FL ~ polyA_dist, data = data_class_Iso_Seq$B31, sum)   
+datos7$Seq = c(rep("Iso_Seq",length(datos7[1])))
+datosm <- aggregate(FL ~ polyA_dist, data = data_class_Mas_Seq_2$B31, sum)
+datosm$Seq = c(rep("Mas_Seq",length(datosm[1])))
+datos7 <- rbind(datos7, datosm)
+colnames(datos7) <- c("polyA_dist","Count","Seq")
+datos7$CPM <- ifelse(datos7$Seq == "Iso_Seq", datos7$Count / sum(datos7$Count[datos7$Seq == "Iso_Seq"]) * 1e6,
+                     datos7$Count / sum(datos7$Count[datos7$Seq == "Mas_Seq"]) * 1e6)
+datos7$polyA_dist <- as.numeric(datos7$polyA_dist)
+ggplot(datos7, aes(x = polyA_dist, y = CPM, color = Seq)) + 
+  #labs(title = "B31 polyA motif", x = "Counts per million", y = "Motif") +
+  geom_line() +
+  labs(title = "B31 PolyA motif dist") +
+  scale_fill_manual(values = colorConesa(n = 2))+
+  mytheme #  theme(axis.text.x = element_text(angle = 60)) 
+
+```
+
+
+# Comparative non redundant plots
+
+```{r, eval=FALSE}
+
+nuevo_dataframe <- data.frame(UJC = character())
+
+procesar_reads <- function(dataframe1, dataframe2, prefix) {
+  # Definir la función interna para procesar cada dataframe
+  procesar_dataframe <- function(df_name, dataframe) {
+    if (startsWith(df_name, prefix)) {
+      co_columna <- dataframe[[df_name]]$UJC 
+      return(data.frame(UJC = co_columna))
+    } else {
+      return(NULL) # Si el nombre del dataframe no comienza con "B3", retornar NULL
+    }
+  }
+
+  nuevos_dataframes1 <- lapply(names(dataframe1), procesar_dataframe, dataframe1) 
+  nuevo_dataframe <- do.call(rbind, nuevos_dataframes1) 
+  elementos_comunes <- Reduce(intersect, nuevo_dataframe) 
+  tabla_frecuencia <- table(elementos_comunes)
+  tabla_frecuencia <- as.data.frame(tabla_frecuencia) 
+  tabla_filtrada1 <- subset(tabla_frecuencia, Freq == 3) 
+  
+  nuevos_dataframes2 <- lapply(names(dataframe2), procesar_dataframe, dataframe2)
+  nuevo_dataframe <- do.call(rbind, nuevos_dataframes2)
+  elementos_comunes <- Reduce(intersect, nuevo_dataframe)
+  tabla_frecuencia <- table(elementos_comunes)
+  tabla_frecuencia <- as.data.frame(tabla_frecuencia)
+  tabla_filtrada2 <- subset(tabla_frecuencia, Freq == 3)
+
+  elementos_comunes_all <- intersect(tabla_filtrada1$elementos_comunes, tabla_filtrada2$elementos_comunes)
+  return(elementos_comunes_all)
+}
+
+comunes_brain <- procesar_reads(data_class_Iso_Seq, data_class_Mas_Seq_2, "B3") 
+length(comunes_brain)
+comunes_kidney <- procesar_reads(data_class_Iso_Seq, data_class_Mas_Seq_2, "K3") 
+length(comunes_kidney)
+comunes_mix <- procesar_reads(data_class_Iso_Seq, data_class_Mas_Seq_2, "BK") 
+length(comunes_mix)
+
+```
+
+
+## Common reads Comparison Iso - Mas
+
+```{r,  warning=FALSE, error=FALSE, echo=FALSE}
+
+load(paste0(dir, "common_ujc_iso.Rdata"))
+load(paste0(dir, "common_ujc_mas_2.Rdata"))
+
+# Filtrar por lista de UJC son los UJC comunes para Iso-Seq y Mas-Seq por tejido
+comunes <- c(comunes_brain, comunes_kidney, comunes_mix)
+lista_filtered <- lapply(common_ujc_iso, function(df) merge(data.frame(UJC = unique(comunes)), df, all.x = FALSE, by = "UJC"))
+
+# Filtrar los nombres comunes de la columna
+lista_filtered_m <- lapply(common_ujc_mas_2, function(df) merge(data.frame(UJC = unique(comunes)), df, all.x = FALSE, by = "UJC"))
+
+sample_labels_iso <- c("B31", "B32", "B33", "BK20801", "BK20802","BK20803", "K31", "K32", "K33")
+create_upset_plot(common_ujc_iso, sample_labels_iso)
+grid.text("Iso-Seq Common UJC", x = 0.65, y=0.95, gp=gpar(fontsize=20))
+
+sample_labels_mas2 <- c("B31", "B32", "B33", "BK20801", "BK20802","BK20803", "K31", "K32", "K33")
+create_upset_plot(common_ujc_mas_2, sample_labels_mas2)
+grid.text("Mas-Seq Common UJC", x = 0.65, y=0.95, gp=gpar(fontsize=20))
+
+# corrigiendo conteos bajos
+filter_counts <- function(df) { 
+  df_filtered <- df %>%
+    filter((df$FL / sum(df$FL)) * 1e6 > 10) # si es mayor a 10 conteos por millon 
+  return(df_filtered)
+}
+common_ujc_iso_filt <- lapply(common_ujc_iso, filter_counts)
+create_upset_plot(common_ujc_iso_filt, sample_labels_iso)
+grid.text("Iso-Seq Common UJC without low counts", x = 0.65, y=0.98, gp=gpar(fontsize=20))
+
+common_ujc_mas_filt <- lapply(common_ujc_mas_2, filter_counts)
+create_upset_plot(common_ujc_mas_filt, sample_labels_mas2)
+grid.text("Mas-Seq Common UJC without low counts", x = 0.65, y=0.98, gp=gpar(fontsize=20))
+
+# Guardar
+save(common_ujc_iso_filt, file = "common_ujc_iso_filt.RData")
+save(common_ujc_mas_filt, file = "common_ujc_mas_filt.RData")
+
+plot.ls <- list(
+  p2 = create_upset_plot(common_ujc_mas_2, sample_labels_mas2),
+  p1 = create_upset_plot(common_ujc_iso, sample_labels_iso),
+  p2 = create_upset_plot(common_ujc_mas_filt, sample_labels_mas2),
+  p1 = create_upset_plot(common_ujc_iso_filt, sample_labels_mas2)
+)
+names(plot.ls) <- c("MAS-Seq Common UJC", "Iso-Seq Common UJC","Mas-Seq Common UJC \n without low counts", "Iso-Seq Common UJC \n without low counts") 
+for (v in names(plot.ls)) {
+     
+     print(plot.ls[[v]]) 
+     grid.text(v, x = 0.65, y=0.97, gp = gpar(fontsize = 15))
+     grid.edit('arrange', name = v)
+     vp <- grid.grab()
+     plot.ls[[v]] <- vp
+}
+grid.arrange(grobs = plot.ls, ncol = 2)
+
+```
+
+```{r,  warning=FALSE, error=FALSE, echo=FALSE}
+
+create_upset_plot(common_ujc_iso, sample_labels_iso)
+
+create_upset_plot(common_ujc_mas_2, sample_labels_mas2)
+
+create_upset_plot <- function(class_df_list, sample_labels) {
+  listUJC <-do.call(rbind, lapply(class_df_list, function(class_df) class_df[!is.na(class_df$UJC), c("structural_category", "UJC")]))
+   print(listUJC)
+   listUJC <- distinct(listUJC)
+   listUJC <- na.omit(listUJC)
+   # 
+    # Reorder dataframe based on SC preference
+    listUJC$structural_category <- factor(listUJC$structural_category, levels = xaxislabelsF1)
+    listUJC <- listUJC %>%
+    arrange(UJC, structural_category)
+   # 
+   # # Deduplicate the dataframe and keep only the first row for each ID
+    listUJC <- listUJC %>% distinct(UJC, .keep_all = TRUE) %>%
+      ungroup()
+   
+  for (i in 1:length(class_df_list)){
+  sample_id <- names(class_df_list)[[i]]
+  listUJC[, sample_id] <- ifelse(listUJC$UJC %in% class_df_list[[i]]$UJC, 1, 0)
+  
+  }
+    
+  colnames(listUJC) <- c("structural_category", "UJC", sample_labels)
+  head(listUJC)
+  upset(listUJC, sets = sample_labels, number.angles = 30, sets.bar.color = "#15918A", nintersects = 20,
+        order.by = "freq", keep.order = TRUE,
+        point.size = 3.5, line.size = 2,
+        mainbar.y.label = "Transcript intersections", sets.x.label = "Total UJCs",
+        text.scale = c(1.5, 1.5, 1.5, 1.5, 1.6, 1.5),
+        main.bar.color = "black", mb.ratio = c(0.6, 0.4),
+        queries = list(
+          list(query = elements, params = list("structural_category", xaxislabelsF1), color = "#6BAED6", active = T, query.name = "full-splice_match"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[2:length(xaxislabelsF1)]), color = "#FC8D59", active = T, query.name = "incomplete-splice_match"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[3:length(xaxislabelsF1)]), color = "#78C679", active = T, query.name = "novel_in_catalog"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[4:length(xaxislabelsF1)]), color = "#EE6A50", active = T, query.name = "novel_not_in_catalog"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[5:length(xaxislabelsF1)]), color = "#969696", active = T, query.name = "genic"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[6:length(xaxislabelsF1)]), color = "#66C2A4", active = T, query.name = "antisense"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[7:length(xaxislabelsF1)]), color = "goldenrod1", active = T, query.name = "fusion"),
+          list(query = elements, params = list("structural_category", xaxislabelsF1[8:length(xaxislabelsF1)]), color = "darksalmon", active = T, query.name = "intergenic")
+        ))
+}
+
+# Extraer las columnas NAME y CO de cada dataframe en la lista
+lista_subset <- lapply(data_class_Iso_Seq, function(df) df[, c("UJC")])
+
+list_names <- names(lista_subset)
+unique_elements <- unique(unlist(lista_subset))
+presence_matrix <- matrix(0, nrow = length(unique_elements), ncol = length(lista_subset),
+                          dimnames = list(unique_elements, list_names))
+
+for (i in seq_along(lista_subset)) {
+  presence_matrix[unique_elements %in% lista_subset[[i]], i] <- 1
+}
+
+dim(presence_matrix)
+presence_df <- as.data.frame(presence_matrix)
+
+# plot
+upset(presence_df, 
+      sets = colnames(presence_df), 
+      keep.order = TRUE, 
+      order.by = "freq", 
+      main.bar.color = "#FC8D59", 
+      sets.bar.color = "#78C679",   
+      number.angles = 55 ,
+      text.scale = c(2, 2, 2, 1.5, 2, 2))
+grid.text("Iso-Seq Observed Genes", x = 0.65, y=0.95, gp=gpar(fontsize=20)) 
+
+# Extraer las columnas NAME y CO de cada dataframe en la lista
+lista_subset_m <- lapply(data_class_Mas_Seq_2, function(df) df[, c("UJC")])
+
+list_names <- names(lista_subset_m)
+unique_elements <- unique(unlist(lista_subset_m))
+presence_matrix_m <- matrix(0, nrow = length(unique_elements), ncol = length(lista_subset_m),
+                          dimnames = list(unique_elements, list_names))
+
+for (i in seq_along(lista_subset_m)) {
+  presence_matrix_m[unique_elements %in% lista_subset_m[[i]], i] <- 1
+}
+
+dim(presence_matrix_m)
+presence_df_m <- as.data.frame(presence_matrix_m)
+
+# plot
+upset(presence_df_m, 
+      sets = colnames(presence_df), 
+      keep.order = TRUE, 
+      order.by = "freq", 
+      main.bar.color = "#FC8D59", 
+      sets.bar.color = "#78C679",  
+      number.angles = 55 ,
+      text.scale = c(1, 2, 2, 1.5, 2, 2))
+grid.text("Mas-Seq Observed Genes", x = 0.65, y=0.95, gp=gpar(fontsize=20)) 
+# 
+# Filtrar matrix mas-seq
+rownames_a <- rownames(presence_df)
+rownames_b <- rownames(presence_df_m)
+
+lista_combinada <- intersect(unlist(rownames_a), unlist(rownames_b)) 
+elementos_unicos <- unique(lista_combinada)
+# > length(elementos_unicos)
+# [1] 34839
+ 
+presence_df_filtered <- presence_df[rownames(presence_df) %in% elementos_unicos, ]  
+dim(presence_df_filtered)
+
+# plot
+upset(presence_df_filtered, 
+      sets = colnames(presence_df_filtered), 
+      keep.order = TRUE, 
+      order.by = "freq", 
+      main.bar.color = "#FC8D59", 
+      sets.bar.color = "#78C679",  
+      number.angles = 55 ,
+      text.scale = c(1, 2, 2, 1.5, 2, 2))
+grid.text("Iso-Seq Common Genes", x = 0.65, y=0.95, gp=gpar(fontsize=20))
+
+
+presence_df_m_filtered <- presence_df_m[rownames(presence_df_m) %in% elementos_unicos, ] 
+dim(presence_df_m_filtered)
+
+# plot
+upset(presence_df_m_filtered, 
+      sets = colnames(presence_df_m_filtered), 
+      keep.order = TRUE, 
+      order.by = "freq", 
+      main.bar.color = "#FC8D59", 
+      sets.bar.color = "#78C679",  
+      number.angles = 55 ,
+      text.scale = c(1, 2, 2, 1.5, 2, 2))
+grid.text("Mas-Seq Common Genes", x = 0.65, y=0.95, gp=gpar(fontsize=20))
+
+```
+
+
+### Table RT switching 
+
+```{r,  warning=FALSE, error=FALSE, echo=FALSE}
+#| label: tbl-tables
+#| tbl-cap: "Tabl"
+#| tbl-subcap:
+#|   - "Iso-Seq"
+#|   - "MAS-Seq"
+#| layout-ncol: 2
+
+library(knitr)
+
+No_lecturas = read.table("C:/Users/edward/Downloads/CONESALAB/TFM/Conteos/No_lecturas.txt", sep = "\t", header = TRUE, check.names = FALSE)
+
+kbl(No_lecturas[1:2], caption="Iso - Seq") %>%
+kable_classic(full_width = F, html_font = "Cambria")
+
+kbl(No_lecturas[3:4], caption="MAS - Seq") %>%
+kable_classic(full_width = F, html_font = "Cambria")
+
+```
+
+
+```{r,  warning=FALSE, error=FALSE, echo=FALSE}
+#| label: tbl-tables
+#| tbl-cap: "Tabl"
+#| tbl-subcap:
+#|   - "Iso-Seq"
+#|   - "MAS-Seq"
+#| layout-ncol: 2
+
+library(knitr)
+
+rt = read.table("C:/Users/edward/Downloads/CONESALAB/TFM/Conteos/RT-switching.txt", sep = "\t", header = TRUE, check.names = FALSE)
+
+kbl(rt[1:4], caption="Iso - Seq RT – switching") %>%
+kable_classic(full_width = F, html_font = "Cambria")
+
+kbl(rt[5:8], caption="MAS - Seq RT – switching") %>%
+kable_classic(full_width = F, html_font = "Cambria")
+
+```
+
+## Filtered plots
+
+```{r,  warning=FALSE, error=FALSE, echo=FALSE}
+
+df1 <- data.frame(
+  length = data_class_Iso_Seq$B31$length,
+  Seq = "Iso-Seq"
+)
+df2 <- data.frame(
+  length = data_class_Mas_Seq_2$B31$length,
+  Seq = "MAS-Seq"
+)
+df3 <- data.frame(
+  length = data_class_Mas_Seq_2$B31$ref_length,
+  Seq = "Reference"
+)
+df_len <- rbind(df1, df2, df3)
+
+colorCo <- colorConesa(6, palette = "complete")
+p1_ujc_len <-ggplot(df_len, aes(x = length, fill = Seq)) +
+  geom_histogram(aes(y = ..density..), position = "identity", alpha = 0.5, binwidth = 100) +
+  geom_density(alpha = 0.3, linewidth = 0.1) +
+  labs(x="Transcript length", y="Count", title="UJC Lengths Distribution") +
+  geom_vline(data = df_len, aes(xintercept = mean(length), color = Seq), linetype = "dashed", linewidth = 0.5) +
+  scale_fill_manual(values = colorCo) +
+  #scale_color_manual(values = c("white", "white", "white")) +
+  theme(legend.position = "top") +
+  xlim(0, 10000) +
+  mytheme +
+  scale_y_continuous(expand=expansion(mult = c(0,0.1))) 
+ggsave("p1_ujc_len.png", plot = p1_ujc_len, width = 6, height = 6, device = "png")
+
+
+B31_MAS_seq <- read.table(file="C:/Users/edward/Downloads/CONESALAB/TFM/Conteos/n/B31_lengths_fl_MAS-Seq.txt",sep="\t",header=FALSE)
+B31_Iso_seq <- read.table(file="C:/Users/edward/Downloads/CONESALAB/TFM/Conteos/n/B31_lengths_fl_Iso-Seq.txt",sep="\t",header=FALSE)
+df_B31_Iso_seq <- B31_Iso_seq[, c(1, 3)]
+df_B31_MAS_seq <- B31_MAS_seq[, c(1, 3)]
+
+colnames(df_B31_Iso_seq) <- c("Seq","length") 
+colnames(df_B31_MAS_seq) <- c("Seq","length")
+
+df_len_flnc <- rbind(df_B31_Iso_seq, df_B31_MAS_seq)
+
+p2_flnc_len <- ggplot(df_len_flnc, aes(x = length, fill = Seq)) +
+  geom_histogram(aes(y = ..density..), position = "identity", alpha = 0.5, binwidth = 100) +
+  geom_density(alpha = 0.3, linewidth = 0.1) +
+  labs(x="Transcript length", y="Count", title="FLNC Lengths Distribution") +
+  geom_vline(data = df_len_flnc, aes(xintercept = mean(length), color = Seq), linetype = "dashed", linewidth = 0.5) +
+  scale_fill_manual(values = colorCo) +
+  #scale_color_manual(values = c("white", "white", "white")) +
+  theme(legend.position = "top") +
+  xlim(0, 10000) +
+  mytheme +
+  scale_y_continuous(expand=expansion(mult = c(0,0.1)))  
+ggsave("p2_flnc_len.png", plot = p2_flnc_len, width = 6, height = 6, device = "png")
+
+
+
+df1_com <- data.frame(
+  length = common_ujc_iso$B31$length,
+  Seq = "Iso-Seq"
+)
+df2_com <- data.frame(
+  length = common_ujc_mas_2$B31$length,
+  Seq = "MAS-Seq"
+)
+df3_com <- data.frame(
+  length = common_ujc_mas_2$B31$ref_length,
+  Seq = "Reference"
+)
+df_len_com <- rbind(df1_com, df2_com, df3_com)
+
+p3_com_len <- ggplot(df_len_com, aes(x = length, fill = Seq)) +
+  geom_histogram(aes(y = ..density..), position = "identity", alpha = 0.5, binwidth = 100) +
+  geom_density(alpha = 0.3, linewidth = 0.1) +
+  labs(x="Transcript length", y="Count", title="Com. UJC Lengths Distribution") +
+  geom_vline(data = df_len_com , aes(xintercept = mean(length), color = Seq), linetype = "dashed", linewidth = 0.5) +
+  scale_fill_manual(values = colorCo) +
+  #scale_color_manual(values = c("white", "white", "white")) +
+  theme(legend.position = "top") +
+  xlim(0, 10000) +
+  mytheme +
+  scale_y_continuous(expand=expansion(mult = c(0,0.1))) 
+ggsave("p3_com_len.png", plot = p3_com_len, width = 6, height = 6, device = "png")
+
+
+# corrigiendo conteos bajos
+filter_counts <- function(df) { 
+  df_filtered <- df %>%
+    filter((df$FL / sum(df$FL)) * 1e6 > 10) # si es mayor a 10 conteos por millon 
+  return(df_filtered)
+}
+common_ujc_iso_filt <- lapply(common_ujc_iso, filter_counts)
+common_ujc_mas_filt <- lapply(common_ujc_mas_2, filter_counts)
+
+df1_nor <- data.frame(
+  length = common_ujc_iso_filt$B31$length,
+  Seq = "Iso-Seq"
+)
+df2_nor <- data.frame(
+  length = common_ujc_mas_filt$B31$length,
+  Seq = "MAS-Seq"
+)
+df3_nor <- data.frame(
+  length = common_ujc_mas_filt$B31$ref_length,
+  Seq = "Reference"
+)
+df_len_nor <- rbind(df1_nor, df2_nor, df3_nor)
+
+p4_nor_len <- ggplot(df_len_nor, aes(x = length, fill = Seq)) +
+  geom_histogram(aes(y = ..density..), position = "identity", alpha = 0.5, binwidth = 100) +
+  geom_density(alpha = 0.3, linewidth = 0.1) +
+  labs(x="Transcript length", y="Count", title="Filtered UJC Lengths Distribution") +
+  geom_vline(data = df_len_nor, aes(xintercept = mean(length), color = Seq), linetype = "dashed", linewidth = 0.5) +
+  scale_fill_manual(values = colorCo) +
+  #scale_color_manual(values = c("white", "white", "white")) +
+  theme(legend.position = "top") +
+  xlim(0, 10000) +
+  mytheme +
+  scale_y_continuous(expand=expansion(mult = c(0,0.1))) 
+ggsave("p4_nor_len.png", plot = p4_nor_len, width = 6, height = 6, device = "png")
+
+
+```
+
