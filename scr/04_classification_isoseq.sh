@@ -1,0 +1,9 @@
+find /storage/gge/nih/PacBio_IsoSeq/Pool1/RUN* -name "P1*bc1001*classification.txt" | sort | xargs -I {} tail -n +2 {} >> B31_classification.txt
+find /storage/gge/nih/PacBio_IsoSeq/Pool1/RUN* -name "P1*bc1002*classification.txt" | sort | xargs -I {} tail -n +2 {} >> B32_classification.txt
+find /storage/gge/nih/PacBio_IsoSeq/Pool1/RUN* -name "P1*bc1003*classification.txt" | sort | xargs -I {} tail -n +2 {} >> B33_classification.txt
+find /storage/gge/nih/PacBio_IsoSeq/Pool1/RUN* -name "P1*bc1018*classification.txt" | sort | xargs -I {} tail -n +2 {} >> BK20_80_1_classification.txt
+find /storage/gge/nih/PacBio_IsoSeq/Pool1/RUN* -name "P1*bc1019*classification.txt" | sort | xargs -I {} tail -n +2 {} >> BK20_80_2_classification.txt
+find /storage/gge/nih/PacBio_IsoSeq/Pool1/RUN* -name "P1*bc1004*classification.txt" | sort | xargs -I {} tail -n +2 {} >> K31_classification.txt
+find /storage/gge/nih/PacBio_IsoSeq/Pool1/RUN* -name "P1*bc1005*classification.txt" | sort | xargs -I {} tail -n +2 {} >> K32_classification.txt
+find /storage/gge/nih/PacBio_IsoSeq/Pool1/RUN* -name "P1*bc1006*classification.txt" | sort | xargs -I {} tail -n +2 {} >> K33_classification.txt
+find /storage/gge/nih/PacBio_IsoSeq/Pool2/RUN* -name "P2*bc1008*classification.txt" | sort | xargs -I {} tail -n +2 {} >> BK20_80_3_classification.txt
